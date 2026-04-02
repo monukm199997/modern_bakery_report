@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from io import BytesIO
 import pandas as pd
-from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context, style_sheet
+from app.reports.sales_report.utils.sales_report_helper import choose_export_granularity, prepare_dashboard_context, style_sheet
 from app.common.helper import quantity_expr_sql
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import ExportRequest
@@ -17,6 +17,14 @@ def export_sales_report(
     db: Session = Depends(get_db)
 ):
     ctx = prepare_dashboard_context(payload)
+    granularity, period_label_sql, order_by_sql = choose_export_granularity(
+    payload.from_date,
+    payload.to_date,
+    payload.download_type
+)
+    ctx["period_label_sql"] = period_label_sql
+    ctx["order_by_sql"] = order_by_sql
+
     if payload.item_ids:
         group_col = "item_name"
     elif payload.salesman_ids:

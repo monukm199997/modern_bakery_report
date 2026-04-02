@@ -4,7 +4,11 @@ from app.reports.sales_report.routes.company_level_dashboard import router as co
 from app.reports.sales_report.routes.region_level_dashboard import router as region_level_dashboard
 from app.reports.sales_report.routes.tableview import router as sales_tableview
 from app.reports.sales_report.routes.export import router as sales_report_export
+
+from app.reports.customer_sales_report.routes.dashboard import router as customer_dashboard
+
 from app.reports.filters.filters import router as filters
+
 
 app = FastAPI(title="Modern Bakery Reports API")
 
@@ -12,6 +16,9 @@ app.include_router(company_level_dashboard, prefix="/api/sales-report")
 app.include_router(region_level_dashboard, prefix="/api/sales-report") 
 app.include_router(sales_tableview, prefix="/api/sales-report") 
 app.include_router(sales_report_export,prefix="/api/sales-report")
+
+app.include_router(customer_dashboard, prefix="/api/customer-sales-report")
+
 app.include_router(filters, prefix="/api/filters")
 
 

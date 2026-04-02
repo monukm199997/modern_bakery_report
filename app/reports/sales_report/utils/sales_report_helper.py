@@ -79,6 +79,60 @@ def prepare_dashboard_context(payload: SalesReportRequest):
     }
 
 
+def choose_export_granularity(
+    from_date_str: str,
+    to_date_str: str,
+    download_type: str
+):
+    if download_type == "daily":
+        return (
+            "daily",
+            "TO_CHAR(ih.invoice_date, 'YYYY-MM-DD')",
+            "ih.invoice_date"
+        )
+
+    elif download_type == "weekly":
+        return (
+            "weekly",
+            f"""
+            CONCAT(
+                TO_CHAR(
+                    GREATEST(
+                        DATE_TRUNC('week', ih.invoice_date),
+                        DATE '{from_date_str}'
+                    ),
+                    'DD Mon'
+                ),
+                ' - ',
+                TO_CHAR(
+                    LEAST(
+                        DATE_TRUNC('week', ih.invoice_date) + INTERVAL '6 days',
+                        DATE '{to_date_str}'
+                    ),
+                    'DD Mon'
+                )
+            )
+            """,
+            "DATE_TRUNC('week', ih.invoice_date)"
+        )
+
+    elif download_type == "monthly":
+        return (
+            "monthly",
+            "TO_CHAR(DATE_TRUNC('month', ih.invoice_date), 'Mon-YYYY')",
+            "DATE_TRUNC('month', ih.invoice_date)"
+        )
+
+    elif download_type == "yearly":
+        return (
+            "yearly",
+            "TO_CHAR(DATE_TRUNC('year', ih.invoice_date), 'YYYY')",
+            "DATE_TRUNC('year', ih.invoice_date)"
+        )
+
+    # default behavior
+    return choose_granularity(from_date_str, to_date_str)
+
 def style_sheet(ws):
 
         # Freeze pane
