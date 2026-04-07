@@ -9,7 +9,7 @@ from app.common.helper import quantity_expr_sql
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import ExportRequest
 
-router = APIRouter(tags=["Sales Report - Export"])
+router = APIRouter(tags=["Sales Report"])
 
 @router.post("/sales-report/export")
 def export_sales_report(

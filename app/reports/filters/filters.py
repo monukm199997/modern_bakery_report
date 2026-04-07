@@ -1,9 +1,16 @@
-from fastapi import APIRouter, Query
-from sqlalchemy import text
 from functools import lru_cache
+from typing import Optional
+from app.core.database import get_db
+from fastapi import APIRouter, Query, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from app.core.database import engine
-from typing import Optional, List
 from app.common.helper import parse_csv_ids
+from app.dependencies.auth import get_current_user
+from app.common.current_user_permissions import get_user_permissions
+from app.common.filter_permission import apply_permission
+from app.common.query_filter_builder import add_filter
+from copy import deepcopy
 
 router = APIRouter(tags=["Filters"])
 
@@ -13,23 +20,35 @@ def load_static_filters():
 
     with engine.connect() as conn:
 
-        companies = conn.execute(text("""
+        companies = conn.execute(
+            text(
+                """
             SELECT id, company_name
             FROM tbl_company
             ORDER BY company_name
-        """)).fetchall()
+        """
+            )
+        ).fetchall()
 
-        channels = conn.execute(text("""
+        channels = conn.execute(
+            text(
+                """
             SELECT id, outlet_channel
             FROM outlet_channel
             ORDER BY outlet_channel
-        """)).fetchall()
+        """
+            )
+        ).fetchall()
 
-        categories = conn.execute(text("""
+        categories = conn.execute(
+            text(
+                """
             SELECT id, category_name
             FROM item_categories
             ORDER BY category_name
-        """)).fetchall()
+        """
+            )
+        ).fetchall()
 
     return {
         "company": [dict(r._mapping) for r in companies],
@@ -39,82 +58,168 @@ def load_static_filters():
 
 
 @router.get("/static")
-def get_static_filters():
-    return load_static_filters()
+def get_static_filters(current_user=Depends(get_current_user)):
+
+    perms = get_user_permissions(current_user)
+
+    data = deepcopy(load_static_filters())
+
+    # Restrict company list
+    if perms["company"]:
+        data["company"] = [x for x in data["company"] if x["id"] in perms["company"]]
+
+    # Restrict channel list
+    if perms["outlet_channel"]:
+        data["customer_channel"] = [
+            x for x in data["customer_channel"] if x["id"] in perms["outlet_channel"]
+        ]
+
+    # Restrict item category list
+    if perms["item_category"]:
+        data["item_category"] = [
+            x for x in data["item_category"] if x["id"] in perms["item_category"]
+        ]
+
+    return data
 
 
 @router.get("/regions")
-def get_regions(company_ids: Optional[str] = Query(None)):
+def get_regions(
+    company_ids: Optional[str] = Query(None), current_user=Depends(get_current_user), db:Session = Depends(get_db)
+):
 
-    company_ids_list = parse_csv_ids(company_ids)
+    selected_company_ids = parse_csv_ids(company_ids)
+
+    perms = get_user_permissions(current_user)
+
+    final_company_ids = apply_permission(
+        selected_company_ids,
+        perms["company"]
+    )
+
+    where = []
+    params = {}
+
+    add_filter(where, params, "company_id", final_company_ids, "company_ids")
+    add_filter(where, params, "id", perms["region"], "region_ids")
 
     query = """
         SELECT id, region_name
         FROM tbl_region
-        WHERE (:company_ids IS NULL OR company_id = ANY(:company_ids))
-        ORDER BY region_name
     """
 
-    with engine.connect() as conn:
-        rows = conn.execute(
-            text(query),
-            {"company_ids": company_ids_list}
-        ).fetchall()
+    if where:
+        query += " WHERE " + " AND ".join(where)
 
-    return [dict(r._mapping) for r in rows]
+    query += " ORDER BY region_name"
+
+    
+    rows = db.execute(text(query), params).fetchall()
+    result = [dict(r._mapping) for r in rows]
+    return result
 
 
 @router.get("/routes")
-def get_routes(region_ids: Optional[str] = Query(None)):
-    region_ids_list = parse_csv_ids(region_ids)
+def get_routes(
+    region_ids: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db:Session = Depends(get_db)
+):
+    selected_region_ids = parse_csv_ids(region_ids)
+    perms = get_user_permissions(current_user)
+
+    final_region_ids = apply_permission(
+        selected_region_ids,
+        perms["region"]
+    )
+
+    where = []
+    params = {}
+
+    add_filter(where, params, "region_id", final_region_ids, "region_ids")
+    add_filter(where, params, "id", perms["route"], "route_ids")
 
     query = """
         SELECT id, route_name
         FROM tbl_route
-        WHERE (:region_ids IS NULL OR region_id = ANY(:region_ids))
-        ORDER BY route_name
     """
 
-    with engine.connect() as conn:
-        rows = conn.execute(text(query), {
-            "region_ids": region_ids_list
-        }).fetchall()
-    return [dict(r._mapping) for r in rows]
+    if where:
+        query += " WHERE " + " AND ".join(where)
 
+    query += " ORDER BY route_name"
+
+    rows = db.execute(text(query), params).fetchall()
+    result = [dict(r._mapping) for r in rows]
+    return result
 
 @router.get("/salesmen")
-def get_salesmen(route_ids: Optional[str] = Query(None)):
-    route_ids_list = parse_csv_ids(route_ids)
+def get_salesmen(
+    route_ids: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db:Session = Depends(get_db)
+):
+
+    selected_route_ids = parse_csv_ids(route_ids)
+
+    perms = get_user_permissions(current_user)
+
+    final_route_ids = apply_permission(
+        selected_route_ids,
+        perms["route"]
+    )
+
+    where = []
+    params = {}
+
+    add_filter(where, params, "route_id", final_route_ids, "route_ids")
+    add_filter(where, params, "id", perms["salesman"], "salesman_ids")
 
     query = """
         SELECT id, name
         FROM salesman
-        WHERE (:route_ids IS NULL OR route_id = ANY(:route_ids))
-        ORDER BY name
     """
 
-    with engine.connect() as conn:
-        rows = conn.execute(text(query), {
-            "route_ids": route_ids_list
-        }).fetchall()
+    if where:
+        query += " WHERE " + " AND ".join(where)
 
-    return [dict(r._mapping) for r in rows]
-
+    query += " ORDER BY name"
+    rows = db.execute(text(query), params).fetchall()
+    result = [dict(r._mapping) for r in rows]
+    return result
 
 @router.get("/items")
-def get_items(category_ids: Optional[str] = Query(None)):
-    category_ids_list = parse_csv_ids(category_ids)
+def get_items(
+    category_ids: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db:Session = Depends(get_db)
+):
+
+    selected_category_ids = parse_csv_ids(category_ids)
+
+    perms = get_user_permissions(current_user)
+
+    final_category_ids = apply_permission(
+        selected_category_ids,
+        perms["item_category"]
+    )
+
+    where = []
+    params = {}
+
+    add_filter(where, params, "category_id", final_category_ids, "category_ids")
+    add_filter(where, params, "id", perms["item"], "item_ids")
 
     query = """
         SELECT id, name
         FROM items
-        WHERE (:category_ids IS NULL OR category_id = ANY(:category_ids))
-        ORDER BY name
     """
 
-    with engine.connect() as conn:
-        rows = conn.execute(text(query), {
-            "category_ids": category_ids_list
-        }).fetchall()
+    if where:
+        query += " WHERE " + " AND ".join(where)
 
-    return [dict(r._mapping) for r in rows]
+    query += " ORDER BY name"
+
+    rows = db.execute(text(query), params).fetchall()
+    result = [dict(r._mapping) for r in rows]
+    return result

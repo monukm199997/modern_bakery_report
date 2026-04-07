@@ -6,7 +6,7 @@ from app.core.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-router = APIRouter(tags=["Sales Dashboard - region level"])
+router = APIRouter(tags=["Sales Report"])
 
 @router.post("/region-performance")
 def region_perfomance(payload:SalesReportRequest,db:Session = Depends(get_db)):

@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
 
-router = APIRouter(tags=["Sales Report - TableView"])
+router = APIRouter(tags=["Sales Report"])
 
 @router.post("/sales-report-tableview")
 def sales_report_tableview(

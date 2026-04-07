@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.reports.customer_sales_report.utils.customer_report_helper import prepare_dashboard_context
 
-router = APIRouter(tags=["Customer Sales Report Dashboard"])
+router = APIRouter(tags=["Customer Sales Report"])
 
 @router.post("customer-sales-kpis")
 def customer_sales_kpis(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):

@@ -7,7 +7,7 @@ from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
 from app.common.helper import detect_level
 
-router = APIRouter(tags=["Sales Dashboard - Company level"])
+router = APIRouter(tags=["Sales Report"])
 
 
 @router.post("/company-wise-sales")

@@ -1,33 +1,66 @@
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Depends
+from fastapi.security import APIKeyHeader
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 from app.core.database import get_db
-import json
 
 
-db = get_db()
-def get_current_user(report_key: str = Header(...)):
+api_key_header = APIKeyHeader(
+    name="x-api-key",
+    auto_error=False
+)
 
-    query = """
-    SELECT id, name, region, area, warehouse
-    FROM users
-    WHERE uuid = :report_key
-    AND status = 1
-    """
 
-    try:
+def get_current_user(api_key: str = Depends(api_key_header), db: Session = Depends(get_db)):
 
-        user = db.execute(text(query), {"report_key": report_key}).fetchone()
+    if not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="x-api-key header missing"
+        )
 
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid report key")
+    get_report_keys = """
+          SELECT user_id
+                FROM report_keys
+                WHERE TRIM(api_key) = TRIM(:api_key)
+                  AND is_active = true
+                LIMIT 1
+        """
 
-        user_dict = dict(user._mapping)
+    report_key = (
+        db.execute(
+            text(get_report_keys),
+            {"api_key": api_key},
+        ).mappings().first()
+    )
+    
+    if not report_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    get_user_permissions =  """
+            SELECT
+                id,
+                name,
+                company,
+                region,
+                route,
+                salesman,
+                outlet_channel,
+                item_category_id,
+                item_id
+            FROM users
+            WHERE id = :user_id
+            LIMIT 1
+        """
 
-        user_dict["region"] = json.loads(user_dict["region"] or "[]")
-        user_dict["area"] = json.loads(user_dict["area"] or "[]")
-        user_dict["warehouse"] = json.loads(user_dict["warehouse"] or "[]")
+    user = (
+        db.execute(
+            text(get_user_permissions),
+            {"user_id": report_key["user_id"]},
+        ).mappings().first()
+    )
 
-        return user_dict
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return dict(user)
