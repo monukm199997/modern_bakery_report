@@ -1,14 +1,15 @@
 from functools import lru_cache
 from typing import Optional
+from unittest import result
 from app.core.database import get_db
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.database import engine
-from app.common.helper import parse_csv_ids
+from app.utils.helper import parse_csv_ids
 from app.dependencies.auth import get_current_user
 from app.common.current_user_permissions import get_user_permissions
-from app.common.filter_permission import apply_permission
+from app.common.filter_permission import apply_permission_filter
 from app.common.query_filter_builder import add_filter
 from copy import deepcopy
 
@@ -92,7 +93,7 @@ def get_regions(
 
     perms = get_user_permissions(current_user)
 
-    final_company_ids = apply_permission(
+    final_company_ids = apply_permission_filter(
         selected_company_ids,
         perms["company"]
     )
@@ -128,7 +129,7 @@ def get_routes(
     selected_region_ids = parse_csv_ids(region_ids)
     perms = get_user_permissions(current_user)
 
-    final_region_ids = apply_permission(
+    final_region_ids = apply_permission_filter(
         selected_region_ids,
         perms["region"]
     )
@@ -153,6 +154,7 @@ def get_routes(
     result = [dict(r._mapping) for r in rows]
     return result
 
+
 @router.get("/salesmen")
 def get_salesmen(
     route_ids: Optional[str] = Query(None),
@@ -164,9 +166,33 @@ def get_salesmen(
 
     perms = get_user_permissions(current_user)
 
-    final_route_ids = apply_permission(
+    # Case 1: user has explicit route permission
+    if perms["route"] is not None:
+        allowed_route_ids = perms["route"]
+    # Case 2: route=[] -> allow all routes under permitted regions
+    elif perms["region"] is not None:
+
+        rows = db.execute(text("""
+            SELECT id
+            FROM tbl_route
+            WHERE region_id = ANY(:region_ids)
+        """), {
+            "region_ids": perms["region"]
+        }).fetchall()
+
+        allowed_route_ids = [r[0] for r in rows]
+
+    # Case 3: no restriction at all
+    else:
+        allowed_route_ids = None
+
+    # --------------------------------------------------
+    # Apply selected route against allowed route ids
+    # --------------------------------------------------
+
+    final_route_ids = apply_permission_filter(
         selected_route_ids,
-        perms["route"]
+        allowed_route_ids
     )
 
     where = []
@@ -184,9 +210,11 @@ def get_salesmen(
         query += " WHERE " + " AND ".join(where)
 
     query += " ORDER BY name"
+
     rows = db.execute(text(query), params).fetchall()
     result = [dict(r._mapping) for r in rows]
     return result
+
 
 @router.get("/items")
 def get_items(
@@ -199,7 +227,7 @@ def get_items(
 
     perms = get_user_permissions(current_user)
 
-    final_category_ids = apply_permission(
+    final_category_ids = apply_permission_filter(
         selected_category_ids,
         perms["item_category"]
     )
@@ -219,7 +247,7 @@ def get_items(
         query += " WHERE " + " AND ".join(where)
 
     query += " ORDER BY name"
-
+    
     rows = db.execute(text(query), params).fetchall()
     result = [dict(r._mapping) for r in rows]
     return result

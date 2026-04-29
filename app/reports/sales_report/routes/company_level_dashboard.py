@@ -5,15 +5,19 @@ from sqlalchemy import text
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
-from app.common.helper import detect_level
+from app.utils.helper import detect_level
+from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 
 router = APIRouter(tags=["Sales Report"])
 
 
 @router.post("/company-wise-sales")
-async def company_level_dashboard(
-    payload: SalesReportRequest, db: Session = Depends(get_db)
+def company_level_dashboard(
+    payload: SalesReportRequest, db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
 
@@ -44,6 +48,7 @@ async def company_level_dashboard(
         GROUP BY c.company_name
         ORDER BY value DESC
         """
+    print(ctx["params"])
     rows = db.execute(text(query), ctx["params"]).fetchall()
     charts = [dict(row._mapping) for row in rows]
     return {"charts": charts}
@@ -52,8 +57,10 @@ async def company_level_dashboard(
 @router.post("/company-trendline-sales")
 def company_trendline_sales(
     payload: SalesReportRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
 
@@ -87,8 +94,10 @@ def company_trendline_sales(
 
 @router.post("/region-wise-sale")
 def region_wise_sale(payload: SalesReportRequest,
-    db: Session = Depends(get_db)):
-
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
 
@@ -116,7 +125,11 @@ def region_wise_sale(payload: SalesReportRequest,
     return result
 
 @router.post("/top-route")
-def top_route(payload: SalesReportRequest, db:Session=Depends(get_db)):
+def top_route(payload: SalesReportRequest,
+    db:Session=Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
 
     query = f"""
@@ -139,7 +152,11 @@ def top_route(payload: SalesReportRequest, db:Session=Depends(get_db)):
     return result
 
 @router.post("/top-salesman")
-def top_salesman(payload:SalesReportRequest, db:Session = Depends(get_db)):
+def top_salesman(payload:SalesReportRequest,
+    db:Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -164,7 +181,11 @@ def top_salesman(payload:SalesReportRequest, db:Session = Depends(get_db)):
 
 
 @router.post("/top-items")
-def top_items(payload:SalesReportRequest, db:Session=Depends(get_db)):
+def top_items(payload:SalesReportRequest,
+    db:Session=Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -188,7 +209,11 @@ def top_items(payload:SalesReportRequest, db:Session=Depends(get_db)):
 
 
 @router.post("/top-customers")
-def top_customers(payload:SalesReportRequest, db:Session=Depends(get_db)):
+def top_customers(payload:SalesReportRequest,
+    db:Session=Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT

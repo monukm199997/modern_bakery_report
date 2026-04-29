@@ -1,20 +1,29 @@
-from fastapi import APIRouter,Depends,HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
-from app.common.helper import detect_level
+from app.utils.helper import detect_level
+from app.reports.sales_report.utils.sql_query_helper import VISITED_CUSTOMER_PERFORMANCE
 from app.core.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 
 router = APIRouter(tags=["Sales Report"])
 
+
 @router.post("/region-performance")
-def region_perfomance(payload:SalesReportRequest,db:Session = Depends(get_db)):
+def region_perfomance(
+    payload: SalesReportRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
     if level != "region":
-        raise HTTPException(status_code=400, detail="region level required")
-    
+        raise HTTPException(status_code=400, detail="User have not permission for this region")
+
     query = f"""
             SELECT
             r.region_name,
@@ -31,13 +40,16 @@ def region_perfomance(payload:SalesReportRequest,db:Session = Depends(get_db)):
             GROUP BY r.region_name
             ORDER BY value DESC
             """
+    print(ctx["params"])
     rows = db.execute(text(query), ctx["params"]).fetchall()
-    result = [dict(r._mapping)for r in rows]
+    result = [dict(r._mapping) for r in rows]
     return result
 
-    
+
 @router.post("/region-contribution-top-items")
-def region_contribution_top_items(payload:SalesReportRequest, db:Session=Depends(get_db)):
+def region_contribution_top_items(
+    payload: SalesReportRequest, db: Session = Depends(get_db)
+):
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
     if level != "region":
@@ -68,72 +80,30 @@ def region_contribution_top_items(payload:SalesReportRequest, db:Session=Depends
             WHERE rn = 1
             ORDER BY value DESC
             """
-    rows = db.execute(text(query),ctx["params"]).fetchall()
-    result = [dict(r._mapping)for r in rows]
+    rows = db.execute(text(query), ctx["params"]).fetchall()
+    result = [dict(r._mapping) for r in rows]
     return result
-    
-            
+
+
 @router.post("/region-wise-visited-customer-performance")
-def region_wise_visited_customer_performance(payload:SalesReportRequest, db:Session=Depends(get_db)):
+def region_wise_visited_customer_performance(
+    payload: SalesReportRequest, db: Session = Depends(get_db)
+):
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
-
-    total_customers =""" WITH total_customers AS (
-                    SELECT DISTINCT
-                        r.id AS region_id,
-                        r.region_name,
-                        ac.id AS customer_id
-                    FROM agent_customers ac
-                    JOIN tbl_route rt ON rt.id = ac.route_id
-                    JOIN tbl_region r ON r.id = rt.region_id
-                    WHERE
-                        ac.status = 1
-                        AND r.id = ANY(:region_ids)
-                )"""
+    if level != "region":
+        raise HTTPException(status_code=400, detail="region level required")
     
-    visited_customers = """
-                    visited_customers AS (
-                    SELECT DISTINCT
-                        r.id AS region_id,
-                        ih.customer_id
-                    FROM invoice_headers ih
-                    JOIN invoice_details id ON id.header_id = ih.id
-                    JOIN agent_customers ac ON ac.id = ih.customer_id
-                    JOIN tbl_route rt ON rt.id = ih.route_id
-                    JOIN tbl_region r ON r.id = rt.region_id
-                    WHERE
-                        ac.status = 1
-                        AND id.item_total > 0
-                        AND ih.invoice_date BETWEEN :from_date AND :to_date
-                        AND r.id = ANY(:region_ids)
-                )"""
+    rows = db.execute(text(VISITED_CUSTOMER_PERFORMANCE), ctx["params"]).fetchall()
+    if not rows:
+        return {"message": "No data found for the given criteria."}
     
-    query =f"""
-            {total_customers},
-            {visited_customers}
-            SELECT
-                    t.region_name,
-                    COUNT(DISTINCT v.customer_id) AS visited_customers,
-                    COUNT(DISTINCT t.customer_id) AS total_customers,
-                    ROUND(
-                        (COUNT(DISTINCT v.customer_id)::numeric
-                        / NULLIF(COUNT(DISTINCT t.customer_id), 0)) * 100,
-                        2
-                    ) AS visited_percentage
-                FROM total_customers t
-                LEFT JOIN visited_customers v
-                    ON t.customer_id = v.customer_id
-                    AND t.region_id = v.region_id
-                GROUP BY t.region_id, t.region_name
-                ORDER BY t.region_name;
-            """
-    rows = db.execute(text(query), ctx["params"]).fetchall()
-    result = [dict(r._mapping)for r in rows]
+    result = [dict(r._mapping) for r in rows]
     return result
 
 
 @router.post("/region-trendline-sales")
-def region_trendline_sales(payload:SalesReportRequest,db:Session=Depends(get_db)):
+def region_trendline_sales(payload: SalesReportRequest, db: Session = Depends(get_db)):
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
     if level != "region":
@@ -155,5 +125,5 @@ def region_trendline_sales(payload:SalesReportRequest,db:Session=Depends(get_db)
             ORDER BY {ctx['order_by_sql']}, r.region_name
         """
     rows = db.execute(text(query), ctx["params"]).fetchall()
-    result = [dict(r._mapping)for r in rows]
+    result = [dict(r._mapping) for r in rows]
     return result

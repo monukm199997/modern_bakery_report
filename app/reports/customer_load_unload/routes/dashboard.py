@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from app.reports.customer_load_unload.schemas.schema import LoadUnloadReportRequest
-from app.common.helper import validate_mandatory, quantity_expr_sql
+from app.utils.helper import validate_mandatory, quantity_expr_sql
 from app.reports.customer_load_unload.utils.load_unload_helper import sales_query_parts
 from app.core.database import get_db
 from sqlalchemy.orm import Session

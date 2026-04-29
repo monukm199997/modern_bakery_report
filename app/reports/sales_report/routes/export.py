@@ -5,7 +5,7 @@ from sqlalchemy import text
 from io import BytesIO
 import pandas as pd
 from app.reports.sales_report.utils.sales_report_helper import choose_export_granularity, prepare_dashboard_context, style_sheet
-from app.common.helper import quantity_expr_sql
+from app.utils.helper import quantity_expr_sql
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import ExportRequest
 

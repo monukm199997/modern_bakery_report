@@ -1,5 +1,5 @@
 from app.reports.customer_sales_report.schemas.schemas import CustomerSalesReportRequest
-from app.common.helper import validate_mandatory, choose_granularity, quantity_expr_sql
+from app.utils.helper import validate_mandatory, choose_granularity, quantity_expr_sql
 
 
 def build_query_parts(payload: CustomerSalesReportRequest):
