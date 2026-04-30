@@ -68,7 +68,7 @@ def quantity_expr_sql():
         SUM(
             id.quantity * COALESCE(iu.upc::numeric, 1)
         )::numeric,
-        3
+        2
     )
     """
 
