@@ -5,7 +5,6 @@ from sqlalchemy import text
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
-from app.utils.helper import detect_level
 from app.dependencies.auth import get_current_user
 from app.common.apply_payload_permissions import apply_payload_permissions
 
@@ -19,10 +18,6 @@ def company_level_dashboard(
 ):
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
-    level = detect_level(payload)
-
-    if level != "company":
-        raise HTTPException(status_code=400, detail="Company level required")
 
     query = f"""
         WITH filtered_sales AS (
@@ -62,10 +57,6 @@ def company_trendline_sales(
 ):
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
-    level = detect_level(payload)
-
-    if level != "company":
-        raise HTTPException(status_code=400, detail="company level required")
 
     out = {"granularity": ctx["granularity"], "charts": []}
 
@@ -99,11 +90,7 @@ def region_wise_sale(payload: SalesReportRequest,
 ):
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
-    level = detect_level(payload)
-
-    if level != "company":
-        raise HTTPException(status_code=400, detail="company level required")
-    
+   
     query = f"""
             SELECT
             r.region_name,

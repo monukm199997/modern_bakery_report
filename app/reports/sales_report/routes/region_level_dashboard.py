@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
-from app.utils.helper import detect_level
 from app.reports.sales_report.utils.sql_query_helper import VISITED_CUSTOMER_PERFORMANCE
 from app.core.database import get_db
 from sqlalchemy.orm import Session
@@ -20,9 +19,6 @@ def region_perfomance(
 ):
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
-    level = detect_level(payload)
-    if level != "region":
-        raise HTTPException(status_code=400, detail="User have not permission for this region")
 
     query = f"""
             SELECT
@@ -54,9 +50,6 @@ def region_contribution_top_items(
 ):
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
-    level = detect_level(payload)
-    if level != "region":
-        raise HTTPException(status_code=400, detail="region level required")
     query = f"""
         WITH region_item_sales AS (
                 SELECT
@@ -96,9 +89,6 @@ def region_wise_visited_customer_performance(
 ):
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
-    level = detect_level(payload)
-    if level != "region":
-        raise HTTPException(status_code=400, detail="region level required")
     
     rows = db.execute(text(VISITED_CUSTOMER_PERFORMANCE), ctx["params"]).fetchall()
     if not rows:
@@ -117,9 +107,7 @@ def region_trendline_sales(
     
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
-    level = detect_level(payload)
-    if level != "region":
-        raise HTTPException(status_code=400, detail="region level required")
+
     query = f"""
             SELECT
                 {ctx['period_label_sql']} AS period,

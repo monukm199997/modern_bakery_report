@@ -73,7 +73,3 @@ def quantity_expr_sql():
     """
 
 
-def detect_level(payload: SalesReportRequest):
-    if payload.region_ids:
-        return "region"
-    return "company"
