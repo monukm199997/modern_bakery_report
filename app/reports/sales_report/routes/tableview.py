@@ -5,6 +5,8 @@ from sqlalchemy import text
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
+from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 
 router = APIRouter(tags=["Sales Report"])
 
@@ -13,8 +15,11 @@ def sales_report_tableview(
     payload: SalesReportRequest,
     request: Request,
     page: int = Query(1, ge=1),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
     ):
+
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
 
     ROWS_PER_PAGE = 50
@@ -37,7 +42,6 @@ def sales_report_tableview(
         level_name_col = "ch.outlet_channel"
         level_label = "channel_name"
         level_join = """
-            
             LEFT JOIN outlet_channel ch ON ch.id = ac.outlet_channel_id
         """
 

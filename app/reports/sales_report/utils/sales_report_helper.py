@@ -156,8 +156,8 @@ def style_sheet(ws):
 
         # Header style
         header_fill = PatternFill(
-            start_color="2E7D32",
-            end_color="2E7D32",
+            start_color="993442",
+            end_color="993442",
             fill_type="solid"
         )
 
@@ -175,7 +175,6 @@ def style_sheet(ws):
             color="008000"
         )
 
-        # Grand total style
         red_font = Font(
             bold=True,
             color="FF0000"

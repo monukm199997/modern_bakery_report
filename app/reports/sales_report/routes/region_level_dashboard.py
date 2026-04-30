@@ -48,8 +48,11 @@ def region_perfomance(
 
 @router.post("/region-contribution-top-items")
 def region_contribution_top_items(
-    payload: SalesReportRequest, db: Session = Depends(get_db)
+    payload: SalesReportRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
     if level != "region":
@@ -87,8 +90,11 @@ def region_contribution_top_items(
 
 @router.post("/region-wise-visited-customer-performance")
 def region_wise_visited_customer_performance(
-    payload: SalesReportRequest, db: Session = Depends(get_db)
+    payload: SalesReportRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
     if level != "region":
@@ -103,7 +109,13 @@ def region_wise_visited_customer_performance(
 
 
 @router.post("/region-trendline-sales")
-def region_trendline_sales(payload: SalesReportRequest, db: Session = Depends(get_db)):
+def region_trendline_sales(
+    payload: SalesReportRequest, 
+    db: Session = Depends(get_db), 
+    current_user=Depends(get_current_user)
+    ):
+    
+    payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     level = detect_level(payload)
     if level != "region":
