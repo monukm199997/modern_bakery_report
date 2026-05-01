@@ -44,6 +44,7 @@ def get_db():
         yield db
         logging.info("Database connection established successfully.")
     except Exception as e:
-        logging.info(f"Database error: {e}")
+        raise
+        # logging.info(f"Database error: {e}")
     finally:
         db.close()
