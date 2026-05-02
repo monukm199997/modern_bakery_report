@@ -54,7 +54,7 @@ def company_trendline_sales(
             c.company_name,
             {ctx['value_expr']} as value
         {BASE_SQL}
-        JOIN tbl_company c ON c.id = ih.company_id
+        LEFT JOIN tbl_company c ON c.id = ih.company_id
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
         GROUP BY period, c.company_name, {ctx['order_by_sql']}

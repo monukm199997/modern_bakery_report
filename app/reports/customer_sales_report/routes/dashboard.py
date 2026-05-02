@@ -13,7 +13,7 @@ OPTIONAL_JOINS_SQL_1
 
 router = APIRouter(tags=["Customer Sales Report"])
 
-@router.post("customer-sales-kpis")
+@router.post("/customer-sales-kpis")
 def customer_sales_kpis(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):
     ctx = prepare_dashboard_context(payload)
     out = {"kpis":{}}

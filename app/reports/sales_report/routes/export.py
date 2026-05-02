@@ -70,11 +70,11 @@ def export_sales_report(
     {ctx["order_by_sql"]} AS period_sort,
     {value_sql} as value
     FROM invoice_headers ih
-    JOIN invoice_details id ON id.header_id = ih.id
-    JOIN items it ON it.id = id.item_id
+    LEFT JOIN invoice_details id ON id.header_id = ih.id
+    LEFT JOIN items it ON it.id = id.item_id
     LEFT JOIN item_categories cat ON cat.id = it.category_id
     {join_sql}
-    JOIN salesman sm ON sm.id = ih.salesman_id
+    LEFT JOIN salesman sm ON sm.id = ih.salesman_id
     LEFT JOIN tbl_region rg ON rg.id = rt.region_id
     LEFT JOIN tbl_company comp ON comp.id = ih.company_id
     LEFT JOIN agent_customers ac ON ac.id = ih.customer_id

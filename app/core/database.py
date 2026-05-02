@@ -42,7 +42,7 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
-        logging.info("Database connection established successfully.")
+        # logging.info("Database connection established successfully.")
     except Exception as e:
         raise
         # logging.info(f"Database error: {e}")

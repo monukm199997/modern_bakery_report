@@ -4,7 +4,7 @@ COMPANY_SALES = """
                 c.company_name,
                 SUM(value) AS value
             FROM filtered_sales fs
-            JOIN tbl_company c
+            LEFT JOIN tbl_company c
                 ON c.id = fs.company_id
             GROUP BY c.company_name
             ORDER BY value DESC
@@ -25,8 +25,8 @@ TOTAL_CUSTOMERS = """ WITH total_customers AS (
                         r.region_name,
                         ac.id AS customer_id
                     FROM agent_customers ac
-                    JOIN tbl_route rt ON rt.id = ac.route_id
-                    JOIN tbl_region r ON r.id = rt.region_id
+                    LEFT JOIN tbl_route rt ON rt.id = ac.route_id
+                    LEFT JOIN tbl_region r ON r.id = rt.region_id
                     WHERE
                         ac.status = 1
                         AND r.id = ANY(:region_ids)
@@ -38,10 +38,10 @@ VISITED_CUSTOMERS = """
                         r.id AS region_id,
                         ih.customer_id
                     FROM invoice_headers ih
-                    JOIN invoice_details id ON id.header_id = ih.id
-                    JOIN agent_customers ac ON ac.id = ih.customer_id
-                    JOIN tbl_route rt ON rt.id = ih.route_id
-                    JOIN tbl_region r ON r.id = rt.region_id
+                    LEFT JOIN invoice_details id ON id.header_id = ih.id
+                    LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+                    LEFT JOIN tbl_route rt ON rt.id = ih.route_id
+                    LEFT JOIN tbl_region r ON r.id = rt.region_id
                     WHERE
                         ac.status = 1
                         AND id.item_total > 0
@@ -73,8 +73,8 @@ VISITED_CUSTOMER_PERFORMANCE = f"""
 
 JOINS_SQL = """
         FROM invoice_headers ih
-        JOIN invoice_details id ON id.header_id = ih.id
-        JOIN items it ON it.id = id.item_id
+        LEFT JOIN invoice_details id ON id.header_id = ih.id
+        LEFT JOIN items it ON it.id = id.item_id
         LEFT JOIN item_categories cat ON cat.id = it.category_id
         LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         """

@@ -16,18 +16,16 @@ def build_query_parts(payload: SalesReportRequest):
         where_fragments.append("id.item_total <> 0")
     
     if payload.company_ids == []:
-        joins.append("JOIN tbl_route rt ON rt.id = ih.route_id")
         where_fragments.append("1 = 0")
     elif payload.company_ids:
-        joins.append("JOIN tbl_route rt ON rt.id = ih.route_id")
+        joins.append("LEFT JOIN tbl_route rt ON rt.id = ih.route_id")
         where_fragments.append("ih.company_id = ANY(:company_ids)")
         params["company_ids"] = payload.company_ids
 
     if payload.region_ids == []:
-        joins.append("JOIN tbl_route rt ON rt.id = ih.route_id")
         where_fragments.append("1 = 0")
     elif payload.region_ids:
-        joins.append("JOIN tbl_route rt ON rt.id = ih.route_id")
+        joins.append("LEFT JOIN tbl_route rt ON rt.id = ih.route_id")
         where_fragments.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
 

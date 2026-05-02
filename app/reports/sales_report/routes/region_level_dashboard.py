@@ -28,7 +28,7 @@ def region_perfomance(
             0 AS total_return
             {BASE_SQL}
             {ctx['join_sql']}
-            JOIN tbl_region r ON r.id = rt.region_id
+            LEFT JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
             GROUP BY r.region_name
             ORDER BY value DESC
@@ -59,9 +59,9 @@ def region_contribution_top_items(
                         ORDER BY {ctx['value_expr']} DESC
                     ) AS rn
                 {BASE_SQL}
-                JOIN items it ON it.id = id.item_id
+                LEFT JOIN items it ON it.id = id.item_id
                 {ctx['join_sql']}
-                JOIN tbl_region r ON r.id = rt.region_id
+                LEFT JOIN tbl_region r ON r.id = rt.region_id
                 WHERE {ctx['where_sql']}
                 GROUP BY r.region_name, it.name
             )
@@ -107,7 +107,7 @@ def region_trendline_sales(
                 {ctx['value_expr']} AS value
             {BASE_SQL}
             {ctx['join_sql']}
-            JOIN tbl_region r ON r.id = rt.region_id
+            LEFT JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
             GROUP BY period, r.region_name,{ctx['order_by_sql']}
             ORDER BY {ctx['order_by_sql']}, r.region_name
