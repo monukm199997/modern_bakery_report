@@ -72,4 +72,3 @@ def quantity_expr_sql():
     )
     """
 
-

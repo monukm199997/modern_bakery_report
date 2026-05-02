@@ -1,3 +1,24 @@
+
+COMPANY_SALES = """
+            SELECT
+                c.company_name,
+                SUM(value) AS value
+            FROM filtered_sales fs
+            JOIN tbl_company c
+                ON c.id = fs.company_id
+            GROUP BY c.company_name
+            ORDER BY value DESC
+            """
+
+REGION_CONTRIBUTION_TOP_ITEMS = """
+            SELECT 
+                region_name, item_name, value
+            FROM region_item_sales
+            WHERE rn = 1
+            ORDER BY value DESC
+        """
+
+
 TOTAL_CUSTOMERS = """ WITH total_customers AS (
                     SELECT DISTINCT
                         r.id AS region_id,
@@ -48,3 +69,12 @@ VISITED_CUSTOMER_PERFORMANCE = f"""
                     GROUP BY t.region_id, t.region_name
                     ORDER BY t.region_name;
                 """
+
+
+JOINS_SQL = """
+        FROM invoice_headers ih
+        JOIN invoice_details id ON id.header_id = ih.id
+        JOIN items it ON it.id = id.item_id
+        LEFT JOIN item_categories cat ON cat.id = it.category_id
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+        """

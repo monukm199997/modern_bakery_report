@@ -210,3 +210,71 @@ def style_sheet(ws):
             ].width = min(max_len + 3, 40)
 
 
+
+def get_level_config(payload):
+    if payload.item_ids:
+        return {
+            "level_id_col": "id.item_id",
+            "level_name_col": "it.name",
+            "level_label": "item_name",
+            "level_join": ""
+        }
+
+    elif payload.item_category_ids:
+        return {
+            "level_id_col": "it.category_id",
+            "level_name_col": "cat.category_name",
+            "level_label": "item_category",
+            "level_join": ""
+        }
+
+    elif payload.customer_channel_ids:
+        return {
+            "level_id_col": "ac.outlet_channel_id",
+            "level_name_col": "ch.outlet_channel",
+            "level_label": "channel_name",
+            "level_join": """
+                LEFT JOIN outlet_channel ch ON ch.id = ac.outlet_channel_id
+            """
+        }
+
+    elif payload.salesman_ids:
+        return {
+            "level_id_col": "ih.salesman_id",
+            "level_name_col": "sm.name",
+            "level_label": "salesman_name",
+            "level_join": "LEFT JOIN salesman sm ON sm.id = ih.salesman_id"
+        }
+
+    elif payload.route_ids:
+        return {
+            "level_id_col": "ih.route_id",
+            "level_name_col": "rt.route_name",
+            "level_label": "route_name",
+            "level_join": ""
+        }
+
+    elif payload.region_ids:
+        return {
+            "level_id_col": "rt.region_id",
+            "level_name_col": "r.region_name",
+            "level_label": "region_name",
+            "level_join": """
+                LEFT JOIN tbl_region r ON r.id = rt.region_id
+            """
+        }
+
+    elif payload.company_ids:
+        return {
+            "level_id_col": "ih.company_id",
+            "level_name_col": "c.company_name",
+            "level_label": "company_name",
+            "level_join": "LEFT JOIN tbl_company c ON c.id = ih.company_id"
+        }
+
+    return {
+        "level_id_col": "ih.company_id",
+        "level_name_col": "c.company_name",
+        "level_label": "company_name",
+        "level_join": "LEFT JOIN tbl_company c ON c.id = ih.company_id"
+    }

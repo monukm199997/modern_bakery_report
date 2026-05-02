@@ -4,7 +4,9 @@ from sqlalchemy import text
 
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
-from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
+from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context, get_level_config
+from app.utils.constant import ROWS_PER_PAGE
+from app.reports.sales_report.utils.sql_query_helper import JOINS_SQL
 from app.dependencies.auth import get_current_user
 from app.common.apply_payload_permissions import apply_payload_permissions
 
@@ -18,79 +20,26 @@ def sales_report_tableview(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
     ):
-
     payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
 
-    ROWS_PER_PAGE = 50
     offset = (page - 1) * ROWS_PER_PAGE
 
-    if payload.item_ids:
-        level_id_col = "id.item_id"
-        level_name_col = "it.name"
-        level_label = "item_name"
-        level_join = ""
-
-    elif payload.item_category_ids:
-        level_id_col = "it.category_id"
-        level_name_col = "cat.category_name"
-        level_label = "item_category"
-        level_join = ""
-
-    elif payload.customer_channel_ids:
-        level_id_col = "ac.outlet_channel_id"
-        level_name_col = "ch.outlet_channel"
-        level_label = "channel_name"
-        level_join = """
-            LEFT JOIN outlet_channel ch ON ch.id = ac.outlet_channel_id
-        """
-
-    elif payload.salesman_ids:
-        level_id_col = "ih.salesman_id"
-        level_name_col = "sm.name"
-        level_label = "salesman_name"
-        level_join = "LEFT JOIN salesman sm ON sm.id = ih.salesman_id"
-
-    elif payload.route_ids:
-        level_id_col = "ih.route_id"
-        level_name_col = "rt.route_name"
-        level_label = "route_name"
-        level_join = ""
-
-    elif payload.region_ids:
-        level_id_col = "rt.region_id"
-        level_name_col = "r.region_name"
-        level_label = "region_name"
-        level_join = """
-            LEFT JOIN tbl_region r ON r.id = rt.region_id
-        """
-
-    elif payload.company_ids:
-        level_id_col = "ih.company_id"
-        level_name_col = "c.company_name"
-        level_label = "company_name"
-        level_join = "LEFT JOIN tbl_company c ON c.id = ih.company_id"
-
-    else:
-        level_id_col = "ih.company_id"
-        level_name_col = "c.company_name"
-        level_label = "company_name"
-        level_join = "LEFT JOIN tbl_company c ON c.id = ih.company_id"
-
+    level_config = get_level_config(payload)
+    level_id_col = level_config["level_id_col"]
+    level_name_col = level_config["level_name_col"]
+    level_label = level_config["level_label"]
+    level_join = level_config["level_join"]
+   
     joins = [j.strip() for j in ctx["join_sql"].split("\n") if j.strip()]
     joins.extend([j.strip() for j in level_join.split("\n") if j.strip()])
     joins = list(dict.fromkeys(joins))
     join_sql = "\n".join(joins)
 
     from_sql = f"""
-        FROM invoice_headers ih
-        JOIN invoice_details id ON id.header_id = ih.id
-        JOIN items it ON it.id = id.item_id
-        LEFT JOIN item_categories cat ON cat.id = it.category_id
-        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+        {JOINS_SQL}
         {join_sql}
     """
-
     where_sql = f"WHERE {ctx['where_sql']}"
 
     data_sql = f"""
@@ -117,8 +66,7 @@ def sales_report_tableview(
         ORDER BY ih.invoice_date, it.name
         LIMIT :limit OFFSET :offset
     """
-
-
+    
     count_sql = f"""
         SELECT COUNT(*) FROM (
             SELECT

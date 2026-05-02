@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.reports.sales_report.schemas.schemas import SalesReportRequest
 from app.reports.sales_report.utils.sales_report_helper import prepare_dashboard_context
-from app.reports.sales_report.utils.sql_query_helper import VISITED_CUSTOMER_PERFORMANCE
+from app.reports.sales_report.utils.sql_query_helper import VISITED_CUSTOMER_PERFORMANCE, REGION_CONTRIBUTION_TOP_ITEMS
+from app.reports.customer_sales_report.utils.sql_query_helper import BASE_SQL
 from app.core.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -25,19 +26,16 @@ def region_perfomance(
             r.region_name,
             {ctx['value_expr']} AS value,
             0 AS total_return
-            FROM invoice_headers ih
-            JOIN invoice_details id ON id.header_id = ih.id
-            LEFT JOIN item_uoms iu
-                ON iu.item_id = id.item_id
-                AND iu.uom_id = id.uom
+            {BASE_SQL}
             {ctx['join_sql']}
             JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
             GROUP BY r.region_name
             ORDER BY value DESC
             """
-    print(ctx["params"])
     rows = db.execute(text(query), ctx["params"]).fetchall()
+    if not rows:
+        return {"message": "No data found for the given criteria."}
     result = [dict(r._mapping) for r in rows]
     return result
 
@@ -60,23 +58,18 @@ def region_contribution_top_items(
                         PARTITION BY r.region_name
                         ORDER BY {ctx['value_expr']} DESC
                     ) AS rn
-                FROM invoice_headers ih
-                JOIN invoice_details id ON id.header_id = ih.id
+                {BASE_SQL}
                 JOIN items it ON it.id = id.item_id
-                LEFT JOIN item_uoms iu
-                    ON iu.item_id = id.item_id
-                    AND iu.uom_id = id.uom
                 {ctx['join_sql']}
                 JOIN tbl_region r ON r.id = rt.region_id
                 WHERE {ctx['where_sql']}
                 GROUP BY r.region_name, it.name
             )
-            SELECT region_name, item_name, value
-            FROM region_item_sales
-            WHERE rn = 1
-            ORDER BY value DESC
+            {REGION_CONTRIBUTION_TOP_ITEMS}
             """
     rows = db.execute(text(query), ctx["params"]).fetchall()
+    if not rows:
+        return {"message": "No data found for the given criteria."}
     result = [dict(r._mapping) for r in rows]
     return result
 
@@ -93,7 +86,6 @@ def region_wise_visited_customer_performance(
     rows = db.execute(text(VISITED_CUSTOMER_PERFORMANCE), ctx["params"]).fetchall()
     if not rows:
         return {"message": "No data found for the given criteria."}
-    
     result = [dict(r._mapping) for r in rows]
     return result
 
@@ -113,11 +105,7 @@ def region_trendline_sales(
                 {ctx['period_label_sql']} AS period,
                 r.region_name,
                 {ctx['value_expr']} AS value
-            FROM invoice_headers ih
-            JOIN invoice_details id ON id.header_id = ih.id
-            LEFT JOIN item_uoms iu
-                ON iu.item_id = id.item_id
-                AND iu.uom_id = id.uom
+            {BASE_SQL}
             {ctx['join_sql']}
             JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
@@ -125,5 +113,7 @@ def region_trendline_sales(
             ORDER BY {ctx['order_by_sql']}, r.region_name
         """
     rows = db.execute(text(query), ctx["params"]).fetchall()
+    if not rows:
+        return {"message": "No data found for the given criteria."}
     result = [dict(r._mapping) for r in rows]
     return result
