@@ -19,7 +19,7 @@ def build_query_parts(payload: SalesReportRequest):
         where_fragments.append("1 = 0")
     elif payload.company_ids:
         joins.append("LEFT JOIN tbl_route rt ON rt.id = ih.route_id")
-        where_fragments.append("ih.company_id = ANY(:company_ids)")
+        where_fragments.append("s.company_id = ANY(:company_ids)")
         params["company_ids"] = payload.company_ids
 
     if payload.region_ids == []:
@@ -76,7 +76,7 @@ def prepare_dashboard_context(payload: SalesReportRequest):
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = quantity_expr_sql()
+    quantity = "SUM(id.quantity)"
     value_expr = (
         quantity if payload.search_type.lower() == "quantity"
         else "SUM(id.item_total)"

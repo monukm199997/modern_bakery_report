@@ -2,6 +2,7 @@
 BASE_SQL = """
         FROM invoice_headers ih
             LEFT JOIN invoice_details id ON id.header_id = ih.id
+            LEFT JOIN salesman s ON s.id = ih.salesman_id
             LEFT JOIN item_uoms iu
                 ON iu.item_id = id.item_id
                 AND iu.uom_id = id.uom

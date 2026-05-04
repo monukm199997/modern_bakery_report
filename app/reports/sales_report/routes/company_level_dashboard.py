@@ -18,17 +18,17 @@ def company_wise_sales(
     payload: SalesReportRequest, db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
         WITH filtered_sales AS (
             SELECT
-                ih.company_id,
+                s.company_id,
                 {ctx['value_expr']} AS value
             {BASE_SQL}
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
-            GROUP BY ih.company_id
+            GROUP BY s.company_id
         )
         {COMPANY_SALES}
         """
@@ -45,7 +45,7 @@ def company_trendline_sales(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     out = {"granularity": ctx["granularity"]}
     query = f"""
@@ -73,7 +73,7 @@ def region_wise_sale(payload: SalesReportRequest,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -81,7 +81,7 @@ def region_wise_sale(payload: SalesReportRequest,
             {ctx['value_expr']} as value
             {BASE_SQL}
             {ctx['join_sql']}
-            JOIN tbl_region r ON r.id = rt.region_id
+            LEFT JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
             GROUP BY r.region_name
             ORDER BY value DESC
@@ -98,7 +98,7 @@ def top_route(payload: SalesReportRequest,
     db:Session=Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -123,7 +123,7 @@ def top_salesman(payload:SalesReportRequest,
     db:Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -132,7 +132,6 @@ def top_salesman(payload:SalesReportRequest,
             {ctx['value_expr']} as value
             {BASE_SQL}
             {ctx['join_sql']}
-            JOIN salesman s ON s.id = ih.salesman_id 
             WHERE {ctx['where_sql']}
             GROUP BY s.name, rt.route_name
             ORDER BY value DESC
@@ -150,14 +149,14 @@ def top_items(payload:SalesReportRequest,
     db:Session=Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
             i.name as item_name,
             {ctx['value_expr']} as value
             {BASE_SQL}
-            JOIN items i ON i.id = id.item_id
+            LEFT JOIN items i ON i.id = id.item_id
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
             GROUP BY i.name
@@ -176,7 +175,7 @@ def top_customers(payload:SalesReportRequest,
     db:Session=Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -185,7 +184,7 @@ def top_customers(payload:SalesReportRequest,
             ac.contact_no,
             {ctx['value_expr']} as value
             {BASE_SQL}
-            JOIN agent_customers ac ON ac.id = ih.customer_id
+            LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
             GROUP BY ac.name,rt.route_name,ac.contact_no
