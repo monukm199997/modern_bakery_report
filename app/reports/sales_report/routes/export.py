@@ -32,6 +32,8 @@ def export_sales_report(
 
     if payload.item_ids:
         group_col = "item_name"
+    elif payload.item_category_ids:
+        group_col = "material_category"
     elif payload.salesman_ids:
         group_col = "name"
     elif payload.route_ids:
@@ -94,7 +96,6 @@ def export_sales_report(
         period_label
     ORDER BY
         {group_col},
-        it.name,
         {ctx["order_by_sql"]}
     """
 
