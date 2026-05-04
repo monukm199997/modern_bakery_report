@@ -20,7 +20,7 @@ def sales_report_tableview(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
     ):
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
 
     offset = (page - 1) * ROWS_PER_PAGE

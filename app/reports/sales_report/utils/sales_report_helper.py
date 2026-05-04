@@ -15,47 +15,40 @@ def build_query_parts(payload: SalesReportRequest):
     if payload.display_quantity and payload.display_quantity.lower() == "without_free_good":
         where_fragments.append("id.item_total <> 0")
     
-    if payload.company_ids == []:
-        where_fragments.append("1 = 0")
-    elif payload.company_ids:
+   
+    if payload.company_ids:
         joins.append("LEFT JOIN tbl_route rt ON rt.id = ih.route_id")
         where_fragments.append("s.company_id = ANY(:company_ids)")
         params["company_ids"] = payload.company_ids
 
-    if payload.region_ids == []:
-        where_fragments.append("1 = 0")
-    elif payload.region_ids:
+   
+    if payload.region_ids:
         joins.append("LEFT JOIN tbl_route rt ON rt.id = ih.route_id")
         where_fragments.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
 
-    if payload.route_ids == []:
-        where_fragments.append("1 = 0")
-    elif payload.route_ids:
+    
+    if payload.route_ids:
         where_fragments.append("ih.route_id = ANY(:route_ids)")
         params["route_ids"] = payload.route_ids
         
-    if payload.salesman_ids == []:
-        where_fragments.append("1 = 0")
-    elif payload.salesman_ids:
+    
+    if payload.salesman_ids:
         where_fragments.append("ih.salesman_id = ANY(:salesman_ids)")
         params["salesman_ids"] = payload.salesman_ids
 
-    if payload.item_category_ids == []:
-        where_fragments.append("1 = 0")
-    elif payload.item_category_ids:
+   
+    if payload.item_category_ids:
         where_fragments.append("it.category_id = ANY(:item_category_ids)")
         params["item_category_ids"] = payload.item_category_ids
 
-    if payload.item_ids == []:
-        where_fragments.append("1 = 0")
-    elif payload.item_ids:
+   
+    if payload.item_ids:
         where_fragments.append("id.item_id = ANY(:item_ids)")
         params["item_ids"] = payload.item_ids
 
-    if payload.customer_channel_ids == []:
-        where_fragments.append("1 = 0")
-    elif payload.customer_channel_ids:
+    
+    if payload.customer_channel_ids:
         where_fragments.append("ac.outlet_channel_id = ANY(:customer_channel_ids)")
         params["customer_channel_ids"] = payload.customer_channel_ids
 
@@ -267,12 +260,12 @@ def get_level_config(payload):
             "level_id_col": "ih.company_id",
             "level_name_col": "c.company_name",
             "level_label": "company_name",
-            "level_join": "LEFT JOIN tbl_company c ON c.id = ih.company_id"
+            "level_join": "LEFT JOIN tbl_company c ON c.id = s.company_id"
         }
 
     return {
         "level_id_col": "ih.company_id",
         "level_name_col": "c.company_name",
         "level_label": "company_name",
-        "level_join": "LEFT JOIN tbl_company c ON c.id = ih.company_id"
+        "level_join": "LEFT JOIN tbl_company c ON c.id = s.company_id"
     }

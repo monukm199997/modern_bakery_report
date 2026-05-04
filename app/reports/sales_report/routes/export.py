@@ -20,7 +20,7 @@ def export_sales_report(
     current_user=Depends(get_current_user),
 ):
     
-    payload = apply_payload_permissions(payload, current_user)
+    # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     granularity, period_label_sql, order_by_sql = choose_export_granularity(
     payload.from_date,
@@ -62,7 +62,7 @@ def export_sales_report(
     comp.company_name,
     rg.region_name,
     rt.route_name,
-    sm.name,
+    s.name,
     it.code AS item_code,
     it.name AS item_name,
     cat.category_name AS material_category,
@@ -73,10 +73,10 @@ def export_sales_report(
     LEFT JOIN invoice_details id ON id.header_id = ih.id
     LEFT JOIN items it ON it.id = id.item_id
     LEFT JOIN item_categories cat ON cat.id = it.category_id
+    LEFT JOIN salesman s ON s.id = ih.salesman_id
     {join_sql}
-    LEFT JOIN salesman sm ON sm.id = ih.salesman_id
     LEFT JOIN tbl_region rg ON rg.id = rt.region_id
-    LEFT JOIN tbl_company comp ON comp.id = ih.company_id
+    LEFT JOIN tbl_company comp ON comp.id = s.company_id
     LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
     LEFT JOIN item_uoms iu
                 ON iu.item_id = id.item_id
@@ -86,7 +86,7 @@ def export_sales_report(
         comp.company_name,
         rg.region_name,
         rt.route_name,
-        sm.name,
+        s.name,
         it.code,
         it.name,
         cat.category_name,

@@ -74,6 +74,7 @@ VISITED_CUSTOMER_PERFORMANCE = f"""
 JOINS_SQL = """
         FROM invoice_headers ih
         LEFT JOIN invoice_details id ON id.header_id = ih.id
+        LEFT JOIN salesman s ON s.id = ih.salesman_id
         LEFT JOIN items it ON it.id = id.item_id
         LEFT JOIN item_categories cat ON cat.id = it.category_id
         LEFT JOIN agent_customers ac ON ac.id = ih.customer_id

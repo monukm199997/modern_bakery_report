@@ -6,7 +6,7 @@ from app.core.database import get_db
 
 
 api_key_header = APIKeyHeader(
-    name="report_key",
+    name="x-api-key",
     auto_error=False
 )
 
@@ -16,7 +16,7 @@ def get_current_user(api_key: str = Depends(api_key_header), db: Session = Depen
     if not api_key:
         raise HTTPException(
             status_code=401,
-            detail="report_key header missing"
+            detail="x-api-key header missing"
         )
 
     get_report_keys = """
