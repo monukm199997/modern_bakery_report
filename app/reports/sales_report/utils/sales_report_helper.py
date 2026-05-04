@@ -203,7 +203,18 @@ def style_sheet(ws):
 
 
 def get_level_config(payload):
-    if payload.item_ids:
+
+    if payload.customer_channel_ids:
+        return {
+            "level_id_col": "ac.outlet_channel_id",
+            "level_name_col": "ch.outlet_channel",
+            "level_label": "channel_name",
+            "level_join": """
+                LEFT JOIN outlet_channel ch ON ch.id = ac.outlet_channel_id
+            """
+        }
+    
+    elif payload.item_ids:
         return {
             "level_id_col": "id.item_id",
             "level_name_col": "it.name",
@@ -217,16 +228,6 @@ def get_level_config(payload):
             "level_name_col": "cat.category_name",
             "level_label": "item_category",
             "level_join": ""
-        }
-
-    elif payload.customer_channel_ids:
-        return {
-            "level_id_col": "ac.outlet_channel_id",
-            "level_name_col": "ch.outlet_channel",
-            "level_label": "channel_name",
-            "level_join": """
-                LEFT JOIN outlet_channel ch ON ch.id = ac.outlet_channel_id
-            """
         }
 
     elif payload.salesman_ids:
