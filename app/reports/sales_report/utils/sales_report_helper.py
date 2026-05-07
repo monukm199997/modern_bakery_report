@@ -69,7 +69,7 @@ def prepare_dashboard_context(payload: SalesReportRequest):
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = "SUM(id.quantity)"
+    quantity = quantity_expr_sql()
     value_expr = (
         quantity if payload.search_type.lower() == "quantity"
         else "SUM(id.item_total)"

@@ -16,7 +16,7 @@ def build_query_parts(payload: CustomerSalesReportRequest):
 
     if payload.company_ids:
         joins.append("JOIN tbl_route rt ON rt.id = ih.route_id")
-        where_fragments.append("ih.company_id = ANY(:company_ids)")
+        where_fragments.append("s.company_id = ANY(:company_ids)")
         params["company_ids"] = payload.company_ids
 
     if payload.region_ids:

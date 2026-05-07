@@ -13,8 +13,8 @@ def parse_csv_ids(s: Optional[str]) -> Optional[List[int]]:
         return None
     
 def validate_mandatory(filters: SalesReportRequest):
-    if not filters.from_date or not filters.to_date or not filters.search_type:
-        raise HTTPException(status_code=400, detail="from_date, to_date, and search_type are required")
+    if not filters.from_date or not filters.to_date:
+        raise HTTPException(status_code=400, detail="from_date and to_date are required")
     try:
         _ = datetime.fromisoformat(filters.from_date)
         _ = datetime.fromisoformat(filters.to_date)
@@ -66,9 +66,10 @@ def quantity_expr_sql():
     return """
     ROUND(
         SUM(
-            id.quantity * COALESCE(iu.upc::numeric, 1)
+            id.quantity 
         )::numeric,
         2
     )
     """
 
+# * COALESCE(iu.upc::numeric, 1)

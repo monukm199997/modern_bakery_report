@@ -68,6 +68,7 @@ def channel_wise_sales(payload:CustomerSalesReportRequest, db:Session= Depends(g
                 ) AS percentage
             {BASE_SQL}
             {OPTIONAL_JOINS_SQL}
+            LEFT JOIN outlet_channel oc ON oc.id = cst.outlet_channel_id
             WHERE {ctx['where_sql']}
             GROUP BY oc.outlet_channel, oc.outlet_channel_code
             ORDER BY value DESC
