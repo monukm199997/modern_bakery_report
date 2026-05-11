@@ -3,6 +3,7 @@ from app.core.database import get_db
 from app.reports.customer_sales_report.schemas.schemas import CustomerSalesReportRequest
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from app.dependencies.auth import get_current_user
 from app.reports.customer_sales_report.utils.customer_report_helper import prepare_dashboard_context
 from app.reports.customer_sales_report.utils.sql_query_helper import (
 CUSTOMER_SALES_KPIS_SQL,
@@ -11,7 +12,7 @@ OPTIONAL_JOINS_SQL,
 OPTIONAL_JOINS_SQL_1
 )
 
-router = APIRouter(tags=["Customer Sales Report"])
+router = APIRouter(tags=["Customer Sales Report"], dependencies=[Depends(get_current_user)])
 
 @router.post("/customer-sales-kpis")
 def customer_sales_kpis(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):
@@ -68,6 +69,7 @@ def channel_wise_sales(payload:CustomerSalesReportRequest, db:Session= Depends(g
                 ) AS percentage
             {BASE_SQL}
             {OPTIONAL_JOINS_SQL}
+            LEFT JOIN tbl_route rt ON rt.id = ih.route_id
             LEFT JOIN outlet_channel oc ON oc.id = cst.outlet_channel_id
             WHERE {ctx['where_sql']}
             GROUP BY oc.outlet_channel, oc.outlet_channel_code

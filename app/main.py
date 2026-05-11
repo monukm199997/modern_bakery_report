@@ -6,6 +6,8 @@ from app.reports.sales_report.routes.tableview import router as sales_tableview
 from app.reports.sales_report.routes.export import router as sales_report_export
 
 from app.reports.customer_sales_report.routes.dashboard import router as customer_dashboard
+from app.reports.customer_sales_report.routes.tableview import router as customer_tableview
+from app.reports.customer_sales_report.routes.export import router as customer_export
 
 from app.reports.customer_dashboard.routes.customer_dashboard import router as customer_primary_dashboard
 
@@ -20,6 +22,8 @@ app.include_router(sales_tableview, prefix="/api/sales-report")
 app.include_router(sales_report_export,prefix="/api/sales-report")
 
 app.include_router(customer_dashboard, prefix="/api/customer-sales-report")
+app.include_router(customer_tableview, prefix="/api/customer-sales-report")
+app.include_router(customer_export, prefix="/api/customer-sales-report")
 
 app.include_router(customer_primary_dashboard, prefix="/api/customer-dashboard")
 
