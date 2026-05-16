@@ -66,9 +66,12 @@ def quantity_expr_sql():
     return """
     ROUND(
         SUM(
-            id.quantity 
-        )::numeric,
-        2
+            CASE
+                WHEN iu.upc IS NULL THEN 0
+                ELSE id.quantity::numeric * iu.upc::numeric
+            END
+        ),
+        6
     )
     """
 

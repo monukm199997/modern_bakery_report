@@ -9,6 +9,8 @@ from app.utils.helper import quantity_expr_sql
 from app.core.database import get_db
 from app.reports.sales_report.schemas.schemas import ExportRequest
 from app.dependencies.auth import get_current_user
+from app.reports.sales_report.utils.sql_query_helper import CHANNEL_JOIN_SQL, ITEM_JOIN_SQL,EXPORT_SELECT,EXPORT_GROUP_BY
+from app.reports.customer_sales_report.utils.sql_query_helper import BASE_SQL
 from app.common.apply_payload_permissions import apply_payload_permissions
 
 router = APIRouter(tags=["Sales Report"])
@@ -19,7 +21,6 @@ def export_sales_report(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    
     # payload = apply_payload_permissions(payload, current_user)
     ctx = prepare_dashboard_context(payload)
     granularity, period_label_sql, order_by_sql = choose_export_granularity(
@@ -61,37 +62,19 @@ def export_sales_report(
 
     query = f"""
     SELECT
-    comp.company_name,
-    rg.region_name,
-    rt.route_name,
-    s.name,
-    it.code AS item_code,
-    it.name AS item_name,
-    cat.category_name AS material_category,
+    {EXPORT_SELECT}
     {ctx["period_label_sql"]} AS period_label,
     {ctx["order_by_sql"]} AS period_sort,
     {value_sql} as value
-    FROM invoice_headers ih
-    LEFT JOIN invoice_details id ON id.header_id = ih.id
-    LEFT JOIN items it ON it.id = id.item_id
-    LEFT JOIN item_categories cat ON cat.id = it.category_id
-    LEFT JOIN salesman s ON s.id = ih.salesman_id
+    {BASE_SQL}
+    {ITEM_JOIN_SQL}
     {join_sql}
     LEFT JOIN tbl_region rg ON rg.id = rt.region_id
     LEFT JOIN tbl_company comp ON comp.id = s.company_id
-    LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-    LEFT JOIN item_uoms iu
-                ON iu.item_id = id.item_id
-                AND iu.uom_id = id.uom
+    {CHANNEL_JOIN_SQL}
     WHERE {ctx["where_sql"]}
     GROUP BY
-        comp.company_name,
-        rg.region_name,
-        rt.route_name,
-        s.name,
-        it.code,
-        it.name,
-        cat.category_name,
+        {EXPORT_GROUP_BY}
         {ctx["order_by_sql"]},
         period_label
     ORDER BY
@@ -187,7 +170,11 @@ def export_sales_report(
         [pivot, category_totals, grand_total_df],
         ignore_index=True
     )
-
+        final_df = final_df.rename(columns={
+            "item_code": "Product Code",
+            "item_name": "Product",
+            "material_category": "Product Category",
+        })
         return final_df
 
     output = BytesIO()

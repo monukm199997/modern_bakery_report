@@ -44,9 +44,9 @@ def sales_report_tableview(
 
     data_sql = f"""
         SELECT
-            it.code AS item_code,
-            it.name AS item_name,
-            cat.category_name AS item_category,
+            i.code AS item_code,
+            i.name AS item_name,
+            ic.category_name AS item_category,
             ih.invoice_date,
             {level_name_col} AS {level_label},
             {ctx["value_expr"]} AS value
@@ -60,10 +60,10 @@ def sales_report_tableview(
             ih.invoice_date,
             {level_id_col},
             {level_name_col},
-            it.code,
-            it.name,
-            cat.category_name
-        ORDER BY ih.invoice_date, it.name
+            i.code,
+            i.name,
+            ic.category_name
+        ORDER BY ih.invoice_date, i.name
         LIMIT :limit OFFSET :offset
     """
     

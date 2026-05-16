@@ -70,12 +70,51 @@ VISITED_CUSTOMER_PERFORMANCE = f"""
                     ORDER BY t.region_name;
                 """
 
+CHANNEL_JOIN_SQL = """
+            LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+            LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
+        """
+ITEM_JOIN_SQL = """
+        LEFT JOIN items i ON i.id = id.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
+    """
 
-JOINS_SQL = """
+JOINS_SQL = f"""
         FROM invoice_headers ih
         LEFT JOIN invoice_details id ON id.header_id = ih.id
         LEFT JOIN salesman s ON s.id = ih.salesman_id
-        LEFT JOIN items it ON it.id = id.item_id
-        LEFT JOIN item_categories cat ON cat.id = it.category_id
+        {ITEM_JOIN_SQL}
         LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         """
+
+EXPORT_SELECT = """
+    comp.company_name,
+    rg.region_name,
+    rt.route_name,
+    s.name,
+    i.code AS item_code,
+    i.name AS item_name,
+    ic.category_name AS material_category,
+"""
+EXPORT_GROUP_BY = """
+        comp.company_name,
+        rg.region_name,
+        rt.route_name,
+        s.name,
+        i.code,
+        i.name,
+        ic.category_name,
+"""
+
+SELECT = """
+        i.code AS "Product",
+        i.name AS "Item",
+        1 ||'X'|| iu.upc AS "PK",
+        iu.name AS "Unit",
+    """
+GROUP_BY = """
+        i.name,
+        i.code,
+        iu.upc,
+        iu.name,
+    """

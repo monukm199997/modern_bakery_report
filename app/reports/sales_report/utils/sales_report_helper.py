@@ -39,7 +39,7 @@ def build_query_parts(payload: SalesReportRequest):
 
    
     if payload.item_category_ids:
-        where_fragments.append("it.category_id = ANY(:item_category_ids)")
+        where_fragments.append("i.category_id = ANY(:item_category_ids)")
         params["item_category_ids"] = payload.item_category_ids
 
    
@@ -54,9 +54,6 @@ def build_query_parts(payload: SalesReportRequest):
 
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params
-
-
-
 
 def prepare_dashboard_context(payload: SalesReportRequest):
     validate_mandatory(payload)
@@ -84,7 +81,6 @@ def prepare_dashboard_context(payload: SalesReportRequest):
         "params": params,
         "value_expr": value_expr,
     }
-
 
 def choose_export_granularity(
     from_date_str: str,
@@ -122,21 +118,18 @@ def choose_export_granularity(
             """,
             "DATE_TRUNC('week', ih.invoice_date)"
         )
-
     elif download_type == "monthly":
         return (
             "monthly",
             "TO_CHAR(DATE_TRUNC('month', ih.invoice_date), 'Mon-YYYY')",
             "DATE_TRUNC('month', ih.invoice_date)"
         )
-
     elif download_type == "yearly":
         return (
             "yearly",
             "TO_CHAR(DATE_TRUNC('year', ih.invoice_date), 'YYYY')",
             "DATE_TRUNC('year', ih.invoice_date)"
         )
-
     # default behavior
     return choose_granularity(from_date_str, to_date_str)
 
@@ -200,8 +193,6 @@ def style_sheet(ws):
                 column_cells[0].column_letter
             ].width = min(max_len + 3, 40)
 
-
-
 def get_level_config(payload):
 
     if payload.customer_channel_ids:
@@ -213,23 +204,20 @@ def get_level_config(payload):
                 LEFT JOIN outlet_channel ch ON ch.id = ac.outlet_channel_id
             """
         }
-    
     elif payload.item_ids:
         return {
             "level_id_col": "id.item_id",
-            "level_name_col": "it.name",
+            "level_name_col": "i.name",
             "level_label": "item_name",
             "level_join": ""
         }
-
     elif payload.item_category_ids:
         return {
-            "level_id_col": "it.category_id",
-            "level_name_col": "cat.category_name",
+            "level_id_col": "i.category_id",
+            "level_name_col": "ic.category_name",
             "level_label": "item_category",
             "level_join": ""
         }
-
     elif payload.salesman_ids:
         return {
             "level_id_col": "ih.salesman_id",
@@ -237,7 +225,6 @@ def get_level_config(payload):
             "level_label": "salesman_name",
             "level_join": "LEFT JOIN salesman sm ON sm.id = ih.salesman_id"
         }
-
     elif payload.route_ids:
         return {
             "level_id_col": "ih.route_id",
@@ -245,7 +232,6 @@ def get_level_config(payload):
             "level_label": "route_name",
             "level_join": ""
         }
-
     elif payload.region_ids:
         return {
             "level_id_col": "rt.region_id",
@@ -255,7 +241,6 @@ def get_level_config(payload):
                 LEFT JOIN tbl_region r ON r.id = rt.region_id
             """
         }
-
     elif payload.company_ids:
         return {
             "level_id_col": "ih.company_id",
@@ -263,7 +248,6 @@ def get_level_config(payload):
             "level_label": "company_name",
             "level_join": "LEFT JOIN tbl_company c ON c.id = s.company_id"
         }
-
     return {
         "level_id_col": "ih.company_id",
         "level_name_col": "c.company_name",

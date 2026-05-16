@@ -4,12 +4,14 @@ from app.reports.sales_report.routes.company_level_dashboard import router as co
 from app.reports.sales_report.routes.region_level_dashboard import router as region_level_dashboard
 from app.reports.sales_report.routes.tableview import router as sales_tableview
 from app.reports.sales_report.routes.export import router as sales_report_export
+from app.reports.sales_report.routes.group_sale_export import router as group_sale_export
 
 from app.reports.customer_sales_report.routes.dashboard import router as customer_dashboard
 from app.reports.customer_sales_report.routes.tableview import router as customer_tableview
 from app.reports.customer_sales_report.routes.export import router as customer_export
 
 from app.reports.customer_dashboard.routes.customer_dashboard import router as customer_primary_dashboard
+from app.reports.sales_dashboard.routes.sales_dashboard import router as sales_primary_dashboard
 
 from app.reports.filters.filters import router as filters
 
@@ -20,12 +22,14 @@ app.include_router(company_level_dashboard, prefix="/api/sales-report")
 app.include_router(region_level_dashboard, prefix="/api/sales-report") 
 app.include_router(sales_tableview, prefix="/api/sales-report") 
 app.include_router(sales_report_export,prefix="/api/sales-report")
+app.include_router(group_sale_export,prefix="/api/sales-report")
 
 app.include_router(customer_dashboard, prefix="/api/customer-sales-report")
 app.include_router(customer_tableview, prefix="/api/customer-sales-report")
 app.include_router(customer_export, prefix="/api/customer-sales-report")
 
 app.include_router(customer_primary_dashboard, prefix="/api/customer-dashboard")
+app.include_router(sales_primary_dashboard, prefix="/api/sales-dashboard")
 
 app.include_router(filters, prefix="/api/filters")
 
