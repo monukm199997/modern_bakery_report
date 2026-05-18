@@ -5,6 +5,7 @@ from app.reports.sales_report.routes.region_level_dashboard import router as reg
 from app.reports.sales_report.routes.tableview import router as sales_tableview
 from app.reports.sales_report.routes.export import router as sales_report_export
 from app.reports.sales_report.routes.group_sale_export import router as group_sale_export
+from app.reports.sales_report.routes.group_sales_tableview import router as group_sale_tableview
 
 from app.reports.customer_sales_report.routes.dashboard import router as customer_dashboard
 from app.reports.customer_sales_report.routes.tableview import router as customer_tableview
@@ -23,6 +24,7 @@ app.include_router(region_level_dashboard, prefix="/api/sales-report")
 app.include_router(sales_tableview, prefix="/api/sales-report") 
 app.include_router(sales_report_export,prefix="/api/sales-report")
 app.include_router(group_sale_export,prefix="/api/sales-report")
+app.include_router(group_sale_tableview,prefix="/api/sales-report")
 
 app.include_router(customer_dashboard, prefix="/api/customer-sales-report")
 app.include_router(customer_tableview, prefix="/api/customer-sales-report")
