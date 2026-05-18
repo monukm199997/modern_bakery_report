@@ -62,10 +62,8 @@ SELECT = """
                 
         """
 
-FROM_CLAUSE = """
-        FROM invoice_headers ih
-            LEFT JOIN invoice_details id ON id.header_id = ih.id
-            LEFT JOIN salesman s ON s.id = ih.salesman_id
+FROM_CLAUSE = f"""
+            {BASE_SQL}
             LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
             LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
             LEFT JOIN customer_categories cat ON cat.id = ac.category_id
