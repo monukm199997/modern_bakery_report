@@ -11,4 +11,5 @@ def get_user_permissions(current_user):
         "outlet_channel": normalize_permission(current_user.get("outlet_channel")),
         "item_category": normalize_permission(current_user.get("item_category_id")),
         "item": normalize_permission(current_user.get("item_id")),
+        "customer": normalize_permission(current_user.get("customer_id")),
     }

@@ -251,3 +251,35 @@ def get_items(
     rows = db.execute(text(query), params).fetchall()
     result = [dict(r._mapping) for r in rows]
     return result
+
+@router.get("/customer")
+def get_customer(
+    outlet_channel_ids: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db:Session = Depends(get_db)
+):
+    selected_category_ids = parse_csv_ids(outlet_channel_ids)
+    perms = get_user_permissions(current_user)
+
+    final_outlet_channel_ids = apply_permission_filter(
+        selected_category_ids,
+        perms["item_category"]
+    )
+
+    where = []
+    params = {}
+
+    add_filter(where, params, "outlet_channel_id", final_outlet_channel_ids, "outlet_channel_ids")
+    add_filter(where, params, "id", perms["customer"], "customer_ids")
+
+    query = """
+        SELECT id, name
+        FROM agent_customers
+    """
+    if where:
+        query += " WHERE " + " AND ".join(where)
+    query += " ORDER BY name"
+    
+    rows = db.execute(text(query), params).fetchall()
+    result = [dict(r._mapping) for r in rows]
+    return result
