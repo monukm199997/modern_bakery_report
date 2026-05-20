@@ -617,7 +617,6 @@ def customer_comparison(payload:SalesReportRequest, db:Session = Depends(get_db)
         SELECT
             ac.id AS customer_id,
             ac.name AS customer_name,
-            rt.route_name,
             s.name AS salesman_name,
             oc.outlet_channel AS customer_channel_name,
             {ctx['value_expr']} AS value
@@ -631,7 +630,6 @@ def customer_comparison(payload:SalesReportRequest, db:Session = Depends(get_db)
         GROUP BY
             ac.id,
             ac.name,
-            rt.route_name,
             s.name,
             oc.outlet_channel
         ORDER BY value DESC

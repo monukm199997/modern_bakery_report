@@ -337,12 +337,8 @@ def live_van_route(payload:SalesDashboardKpisRequest, db:Session = Depends(get_d
 def van_load_utilization(payload:SalesDashboardKpisRequest, db:Session = Depends(get_db)):
     load_ctx = load_prepare_dashboard_context(payload)
     unload_ctx = unload_prepare_dashboard_context(payload)
-    return_ctx = return_prepare_dashboard_context(payload)
-    delivery_ctx = delivery_prepare_dashboard_context(payload)
     params = {
             **load_ctx["params"],
-            **delivery_ctx["params"],
-            **return_ctx["params"],
             **unload_ctx["params"],
     }
 
@@ -362,18 +358,6 @@ def van_load_utilization(payload:SalesDashboardKpisRequest, db:Session = Depends
                 ld.item_id,
                 i.name
         ),
-        delivery_data AS (
-            SELECT
-                dd.item_id,
-                {delivery_ctx['value_expr']} AS delivered
-            FROM agent_delivery_headers dh
-            LEFT JOIN agent_delivery_details dd ON dd.header_id = dh.id
-            LEFT JOIN salesman s ON s.id = dh.salesman_id
-            {delivery_ctx['join_sql']}
-            WHERE {delivery_ctx['where_sql']}
-            GROUP BY
-                dd.item_id
-        ),
         unload_data AS (
             SELECT
                 uld.item_id,
@@ -385,46 +369,19 @@ def van_load_utilization(payload:SalesDashboardKpisRequest, db:Session = Depends
             WHERE {unload_ctx['where_sql']}
             GROUP BY
                 uld.item_id
-        ),
-        return_data AS (
-            SELECT
-                rd.item_id,
-                {return_ctx['value_expr']} AS returns
-            FROM return_header rh
-            LEFT JOIN return_details rd ON rd.header_id = rh.id
-            LEFT JOIN salesman s ON s.id = rh.salesman_id
-            {return_ctx['join_sql']}
-            WHERE {return_ctx['where_sql']}
-            GROUP BY
-                rd.item_id
         )
         SELECT
             l.item_name AS sku,
             COALESCE(l.loaded, 0) AS loaded,
-            COALESCE(d.delivered, 0) AS delivered,
             COALESCE(u.unloaded, 0) AS unloaded,
-            COALESCE(r.returns, 0) AS returns,
             ROUND(
                 (
                 COALESCE(l.loaded, 0)
                 -
-                COALESCE(d.delivered, 0)
-                -
                 COALESCE(u.unloaded, 0)
-                -
-                COALESCE(r.returns, 0)
                 )::numeric,
                 2
-            ) AS in_van,
-
-            ROUND(
-                (
-                    COALESCE(d.delivered, 0)::numeric
-                    /
-                    NULLIF(l.loaded, 0)
-                ) * 100,
-                1
-            ) AS fulfillment_percentage
+            ) AS in_van
 
         FROM loaded_data l
         LEFT JOIN delivery_data d ON d.item_id = l.item_id
@@ -436,19 +393,13 @@ def van_load_utilization(payload:SalesDashboardKpisRequest, db:Session = Depends
     rows = db.execute(text(query), params).fetchall()
     sku_fulfillment = [dict(r._mapping)for r in rows]
     total_loaded = sum(x["loaded"] or 0 for x in sku_fulfillment)
-    total_delivered = sum(x["delivered"] or 0 for x in sku_fulfillment)
     total_unloaded = sum(x["unloaded"] or 0 for x in sku_fulfillment)
-    total_returns = sum(x["returns"] or 0 for x in sku_fulfillment)
-    total_in_van = (total_loaded - total_delivered - total_unloaded - total_returns)
-    sold_percentage = round((total_delivered / total_loaded) * 100, 1) if total_loaded else 0
+    total_in_van = (total_loaded - total_unloaded)
     return {
         "summary": {
             "loaded": round(total_loaded, 2),
-            "delivered": round(total_delivered, 2),
             "unloaded": round(total_unloaded, 2),
-            "returns": round(total_returns, 2),
             "in_van": round(total_in_van, 2),
-            "sold_percentage": sold_percentage
         },
         "sku_fulfillment": sku_fulfillment
     }
