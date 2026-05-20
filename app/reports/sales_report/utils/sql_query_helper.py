@@ -95,6 +95,8 @@ EXPORT_SELECT = """
     i.code AS item_code,
     i.name AS item_name,
     ic.category_name AS material_category,
+    oc.outlet_channel,
+    ac.name AS customer_name,
 """
 EXPORT_GROUP_BY = """
         comp.company_name,
@@ -104,6 +106,8 @@ EXPORT_GROUP_BY = """
         i.code,
         i.name,
         ic.category_name,
+        oc.outlet_channel,
+        ac.name,
 """
 
 SELECT = """

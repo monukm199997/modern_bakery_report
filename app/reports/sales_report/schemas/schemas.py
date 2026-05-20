@@ -14,6 +14,7 @@ class SalesReportRequest(BaseModel):
     item_category_ids: Optional[List[int]] = None
     item_ids: Optional[List[int]] = None
     customer_channel_ids: Optional[List[int]] = None
+    customer_ids: Optional[List[int]] = None
     display_quantity: Optional[str] = None 
 
 
@@ -30,5 +31,6 @@ class ExportRequest(BaseModel):
     item_category_ids: Optional[List[int]] = None
     item_ids: Optional[List[int]] = None
     customer_channel_ids: Optional[List[int]] = None
+    customer_ids: Optional[List[int]] = None
     display_quantity: Optional[str] = None 
  

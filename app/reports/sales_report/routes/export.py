@@ -31,7 +31,11 @@ def export_sales_report(
     ctx["period_label_sql"] = period_label_sql
     ctx["order_by_sql"] = order_by_sql
 
-    if payload.item_ids:
+    if payload.customer_ids:
+        group_col = "customer_name"
+    elif payload.customer_channel_ids:
+        group_col = "outlet_channel"
+    elif payload.item_ids:
         group_col = "item_name"
     elif payload.item_category_ids:
         group_col = "material_category"

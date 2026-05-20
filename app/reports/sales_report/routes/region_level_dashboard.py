@@ -609,3 +609,120 @@ def bottom_channel(payload:SalesReportRequest,
         return{"messase":"No data found for the given criteria"}
     result = [dict(r._mapping)for r in rows]
     return result
+
+@router.post("/customer-comparison")
+def customer_comparison(payload:SalesReportRequest, db:Session = Depends(get_db)):
+    ctx = prepare_dashboard_context(payload)
+    query = f"""
+        SELECT
+            ac.id AS customer_id,
+            ac.name AS customer_name,
+            rt.route_name,
+            s.name AS salesman_name,
+            oc.outlet_channel AS customer_channel_name,
+            {ctx['value_expr']} AS value
+        {BASE_SQL}
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+        LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
+        LEFT JOIN items i ON i.id = id.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
+        {ctx['join_sql']}
+        WHERE {ctx['where_sql']}
+        GROUP BY
+            ac.id,
+            ac.name,
+            rt.route_name,
+            s.name,
+            oc.outlet_channel
+        ORDER BY value DESC
+        """
+    rows = db.execute(text(query),ctx["params"]).fetchall()
+    if not rows:
+        return{"messase":"No data found for the given criteria"}
+    result = [dict(r._mapping)for r in rows]
+    return result
+
+@router.post("/customer-trend")
+def customer_trendline(payload:SalesReportRequest, db:Session = Depends(get_db)):
+    ctx = prepare_dashboard_context(payload)
+    query = f"""
+        SELECT
+            {ctx['period_label_sql']},
+            ac.id AS customer_id,
+            ac.name AS customer_name,
+            {ctx['value_expr']} AS value
+        {BASE_SQL}
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+        LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
+        LEFT JOIN items i ON i.id = id.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
+        {ctx['join_sql']}
+        WHERE {ctx['where_sql']}
+        GROUP BY
+            {ctx['order_by_sql']},
+            ac.id,
+            ac.name
+        ORDER BY
+            {ctx['order_by_sql']}
+        LIMIT 10
+        """
+    rows = db.execute(text(query),ctx["params"]).fetchall()
+    if not rows:
+        return{"messase":"No data found for the given criteria"}
+    result = [dict(r._mapping)for r in rows]
+    return result
+
+
+@router.post("/top_20-customer")
+def top_customer(payload:SalesReportRequest, db:Session = Depends(get_db)):
+    ctx = prepare_dashboard_context(payload)
+    query = f"""
+        SELECT
+            ac.id AS customer_id,
+            ac.name AS customer_name,
+            {ctx['value_expr']} AS value
+        {BASE_SQL}
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+        LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
+        LEFT JOIN items i ON i.id = id.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
+        {ctx['join_sql']}
+        WHERE {ctx['where_sql']}
+        GROUP BY
+            ac.id,
+            ac.name
+        ORDER BY value DESC
+        LIMIT 20
+        """
+    rows = db.execute(text(query),ctx["params"]).fetchall()
+    if not rows:
+        return{"messase":"No data found for the given criteria"}
+    result = [dict(r._mapping)for r in rows]
+    return result
+
+@router.post("/bottom_20-customer")
+def bottom_customer(payload:SalesReportRequest, db:Session = Depends(get_db)):
+    ctx = prepare_dashboard_context(payload)
+    query = f"""
+        SELECT
+            ac.id AS customer_id,
+            ac.name AS customer_name,
+            {ctx['value_expr']} AS value
+        {BASE_SQL}
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+        LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
+        LEFT JOIN items i ON i.id = id.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
+        {ctx['join_sql']}
+        WHERE {ctx['where_sql']}
+        GROUP BY
+            ac.id,
+            ac.name
+        ORDER BY value ASC
+        LIMIT 20
+        """
+    rows = db.execute(text(query),ctx["params"]).fetchall()
+    if not rows:
+        return{"messase":"No data found for the given criteria"}
+    result = [dict(r._mapping)for r in rows]
+    return result
