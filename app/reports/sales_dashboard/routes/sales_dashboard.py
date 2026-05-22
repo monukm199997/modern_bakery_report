@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.dependencies.auth import get_current_user
 from app.reports.sales_dashboard.schemas.schemas import (
     SalesDashboardKpisRequest,
     SalesDashboardRequest,
@@ -16,8 +17,8 @@ from app.reports.sales_dashboard.utils.sales_dash_helper import (
     unload_prepare_dashboard_context,
     return_quantity_expr_sql,
     quantity_expr_sql,
+    order_quantity_expr_sql,
     get_sales_performance_data,
-    visit_plan_build_query_parts,
 )
 from app.reports.customer_sales_report.utils.sql_query_helper import (
     BASE_SQL,
@@ -32,18 +33,16 @@ from app.reports.sales_dashboard.utils.sql_query_helper import (
     SALESMAN_COUNT,
     FROM_CLAUSE_1,
     SELECT_1,
-    TOTAL_AND_COMPLETE_STOPS,
-    VISIT_BASE_JOIN,
-    VISIT_SELECT_FIELS,
-    VISITE_JOINS_SQL,
-    VISIT_GROUP_BY,
-    VAN_INFO,
-    VAN_INFO_GROUP_BY,
-    VISIT_FINAL_SELECT,
+    SALES_OVERVIEW_JOIN_SQL,
+    RETURN_OVERVIEW_JOIN_SQL,
+    VAN_ROUTE_SELECT_SQL,
+    VAN_ROUTE_GROUP_BY,
+    LOADED_DATA_JOIN_SQL,
+    UNLOADED_DATA_JOIN_SQL,
+    ORDER_JOIN_SQL,
 )
 
-router = APIRouter(tags=["Sales Dashboard"])
-
+router = APIRouter(tags=["Sales Dashboard"], dependencies= [Depends(get_current_user)])
 
 @router.post("/kpis")
 def sales_dashboard_kpis(
@@ -117,7 +116,6 @@ def sales_dashboard_kpis(
     }
     return result
 
-
 @router.post("/revenue-split")
 def revenue_split_by_customer_channel(
     payload: SalesDashboardKpisRequest, db: Session = Depends(get_db)
@@ -140,14 +138,11 @@ def revenue_split_by_customer_channel(
     for item in channels:
         item["channel"] = item["channel"] or "Others"
         item["total_revenue"] = round(float(item["total_revenue"] or 0), 2)
-
         item["percentage"] = (
             round((item["total_revenue"] / net_sales) * 100, 1) if net_sales > 0 else 0
         )
-
     result = {"net_sales_mtd": round(net_sales, 2), "channels": channels}
     return result
-
 
 @router.post("/sales-overview")
 def sales_overview(payload: SalesDashboardRequest, db: Session = Depends(get_db)):
@@ -155,12 +150,10 @@ def sales_overview(payload: SalesDashboardRequest, db: Session = Depends(get_db)
     return_quantity = (
         quantity if payload.search_type.lower() == "quantity" else "SUM(rd.total)"
     )
-
     quantity = quantity_expr_sql()
     sales_quantity = (
         quantity if payload.search_type.lower() == "quantity" else "SUM(id.item_total)"
     )
-
     if payload.view_type == "year":
         period_sql = "EXTRACT(YEAR FROM date_col)"
         label_sql = "TO_CHAR(date_col, 'YYYY')"
@@ -200,9 +193,7 @@ def sales_overview(payload: SalesDashboardRequest, db: Session = Depends(get_db)
                 {sales_period} AS period_no,
                 {sales_label} AS period,
                 {sales_quantity} AS sales
-            FROM invoice_headers ih
-            JOIN invoice_details id
-                ON id.header_id = ih.id
+            {SALES_OVERVIEW_JOIN_SQL}
             WHERE {sales_filter}
             GROUP BY 1, 2
         ),
@@ -211,9 +202,7 @@ def sales_overview(payload: SalesDashboardRequest, db: Session = Depends(get_db)
                 {return_period} AS period_no,
                 {return_label} AS period,
                 {return_quantity} AS returns
-            FROM return_header rh
-            JOIN return_details rd
-                ON rd.header_id = rh.id
+            {RETURN_OVERVIEW_JOIN_SQL}
             WHERE {return_filter}
             GROUP BY 1, 2
         )
@@ -229,13 +218,11 @@ def sales_overview(payload: SalesDashboardRequest, db: Session = Depends(get_db)
     rows = db.execute(text(query), params).fetchall()
     return [dict(r._mapping) for r in rows]
 
-
 @router.post("/sales-performance")
 def sales_performance(
     payload: SalesDashboardPerfomanceRequest, db: Session = Depends(get_db)
 ):
     return get_sales_performance_data(db, payload)
-
 
 @router.post("/region-sales-kpis")
 def region_sales_performance(
@@ -287,119 +274,248 @@ def region_sales_performance(
 
 @router.post("/live-van-route")
 def live_van_route(payload:SalesDashboardKpisRequest, db:Session = Depends(get_db)):
-    joins, where_fragments, params = visit_plan_build_query_parts(payload)
-    where_sql = " AND ".join(where_fragments)
-    join_sql = "\n".join(joins)
-    quantity = quantity_expr_sql()
-    value_expr = (
-        quantity if payload.search_type.lower() == "quantity" else "ROUND(SUM(id.item_total)::numeric, 2)"
-    )
+    sales_ctx = prepare_dashboard_context(payload)
     query = f"""
-        WITH summary AS (
-            SELECT
-            {TOTAL_AND_COMPLETE_STOPS}
-            {VISIT_BASE_JOIN}
-            {join_sql}
-            WHERE {where_sql}
-        ),
-        timeline AS (
-            SELECT
-                {VISIT_SELECT_FIELS}
-                {value_expr} AS sales
-            {VISIT_BASE_JOIN}
-            {VISITE_JOINS_SQL}
-            {join_sql}
-            WHERE {where_sql}
-            GROUP BY
-                {VISIT_GROUP_BY}
-            ORDER BY vp.visit_start_time
-        ),
-        van_info AS (
-            SELECT
-               {VAN_INFO}
-            {VISIT_BASE_JOIN}
-            LEFT JOIN tbl_route rt ON rt.id = vp.route_id
-            WHERE {where_sql}
-            GROUP BY
-                {VAN_INFO_GROUP_BY}
-        )
         SELECT
-           {VISIT_FINAL_SELECT}
-    """
-    row = db.execute(text(query),params).fetchone()
-    return {
-        "van_info": row.van_info,
-        "summary": row.summary,
-        "timeline": row.timeline
-    }
+            {VAN_ROUTE_SELECT_SQL}
+            {sales_ctx['value_expr']} AS value
+        {SALES_BASE_SQL}
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
+        {sales_ctx['join_sql']}
+        WHERE {sales_ctx['where_sql']}
+        GROUP BY 
+            {VAN_ROUTE_GROUP_BY}
+        ORDER BY
+            ih.salesman_id,
+            ih.invoice_time
+        """
+    rows = db.execute(text(query), sales_ctx['params']).fetchall()
+    grouped = {}
+
+    for row in rows:
+        salesman_id = row.salesman_id
+
+        if salesman_id not in grouped:
+            grouped[salesman_id] = {
+                "id": row.van_id,
+                "salesman": row.salesman,
+                "stops": []
+            }
+
+        grouped[salesman_id]["stops"].append({
+            "customer": row.customer_name,
+            "time": row.invoice_time.strftime("%H:%M"),
+            "value": float(row.value or 0),
+            "lat": float(row.latitude or 0),
+            "lng": float(row.longitude or 0)
+        })
+
+    fleet = []
+    for van in grouped.values():
+        stops = van["stops"]
+        if not stops:
+            continue
+        stops[-1]["status"] = "active"
+
+        for stop in stops[:-1]:
+            stop["status"] = "done"
+
+        fleet.append({
+            "id": van["id"],
+            "salesman": van["salesman"],
+            "stops": stops,
+            "total_sales":
+                sum(s["value"] for s in stops)
+        })
+
+    return fleet
 
 @router.post("/van-load-utilization")
 def van_load_utilization(payload:SalesDashboardKpisRequest, db:Session = Depends(get_db)):
     load_ctx = load_prepare_dashboard_context(payload)
     unload_ctx = unload_prepare_dashboard_context(payload)
+    sales_ctx = prepare_dashboard_context(payload)
     params = {
             **load_ctx["params"],
             **unload_ctx["params"],
+            **sales_ctx["params"]
     }
 
     query = f"""
         WITH loaded_data AS (
             SELECT
-                ld.item_id,
-                i.name AS item_name,
+                lh.salesman_id,
                 {load_ctx['quantity']} AS loaded
-            FROM tbl_load_header lh
-            LEFT JOIN tbl_load_details ld ON ld.header_id = lh.id
-            LEFT JOIN items i ON i.id = ld.item_id
-            LEFT JOIN salesman s ON s.id = lh.salesman_id
+            {LOADED_DATA_JOIN_SQL}
             {load_ctx['join_sql']}
             WHERE {load_ctx['where_sql']}
             GROUP BY
-                ld.item_id,
-                i.name
+               lh.salesman_id
+        ),
+         sold_data AS (
+            SELECT
+                ih.salesman_id,
+                {sales_ctx['value_expr']} AS sold
+            {SALES_BASE_SQL}
+            {sales_ctx['join_sql']}
+            WHERE {sales_ctx['where_sql']}
+            GROUP BY ih.salesman_id
         ),
         unload_data AS (
             SELECT
-                uld.item_id,
+                ulh.salesman_id,
                 {unload_ctx['quantity']} AS unloaded
-            FROM tbl_unload_header ulh
-            LEFT JOIN tbl_unload_detail uld ON uld.header_id = ulh.id
-            LEFT JOIN salesman s ON s.id = ulh.salesman_id
+            {UNLOADED_DATA_JOIN_SQL}
             {unload_ctx['join_sql']}
             WHERE {unload_ctx['where_sql']}
             GROUP BY
-                uld.item_id
+                ulh.salesman_id
         )
         SELECT
-            l.item_name AS sku,
+            s.osa_code AS van_code,
+            s.name AS salesman,
             COALESCE(l.loaded, 0) AS loaded,
-            COALESCE(u.unloaded, 0) AS unloaded,
-            ROUND(
-                (
-                COALESCE(l.loaded, 0)
-                -
-                COALESCE(u.unloaded, 0)
-                )::numeric,
-                2
-            ) AS in_van
+            COALESCE(sd.sold, 0) AS sold,
+            COALESCE(u.unloaded, 0) AS unloaded
+        FROM salesman s
+        LEFT JOIN loaded_data l ON l.salesman_id = s.id
+        LEFT JOIN sold_data sd ON sd.salesman_id = s.id
+        LEFT JOIN unload_data u ON u.salesman_id = s.id
+    """
+    rows = db.execute(text(query), params).fetchall()
+    result = []
+    for row in rows:
+        loaded = float(row.loaded or 0)
+        sold = float(row.sold or 0)
+        unloaded = float(row.unloaded or 0)
+        result.append({
+            "van_code": row.van_code,
+            "salesman": row.salesman,
+            "loaded": loaded,
+            "sold": sold,
+            "unload": unloaded,
+            "in_van": max(loaded - sold - unloaded, 0),
+            "load_percentage":
+                round((sold / loaded) * 100, 2)
+                if loaded else 0
+        })
+    return result
 
-        FROM loaded_data l
-        LEFT JOIN delivery_data d ON d.item_id = l.item_id
-        LEFT JOIN unload_data u ON u.item_id = l.item_id
-        LEFT JOIN return_data r ON r.item_id = l.item_id
-        ORDER BY delivered DESC
+@router.post("/sales-team-performance")
+def sales_team_performance(payload:SalesDashboardKpisRequest, db:Session = Depends(get_db)):
+    load_ctx = load_prepare_dashboard_context(payload)
+    unload_ctx = unload_prepare_dashboard_context(payload)
+    sales_ctx = prepare_dashboard_context(payload)
+    amount = "ROUND(SUM(id.item_total)::numeric, 2)"
+    quantity = quantity_expr_sql()
+    params = {
+            **load_ctx["params"],
+            **unload_ctx["params"],
+            **sales_ctx["params"]
+        }
+    query = f"""
+        WITH loaded_data AS (
+            SELECT
+                lh.salesman_id,
+                {load_ctx['quantity']} AS loaded
+            {LOADED_DATA_JOIN_SQL}
+            {load_ctx['join_sql']}
+            WHERE {load_ctx['where_sql']}
+            GROUP BY
+               lh.salesman_id
+        ),
+         sold_data AS (
+            SELECT
+                ih.salesman_id,
+                {quantity} AS sales_qty,
+                {amount} AS amount
+            {SALES_BASE_SQL}
+            {sales_ctx['join_sql']}
+            WHERE {sales_ctx['where_sql']}
+            GROUP BY ih.salesman_id
+        ),
+        unload_data AS (
+            SELECT
+                ulh.salesman_id,
+                {unload_ctx['quantity']} AS unloaded
+            {UNLOADED_DATA_JOIN_SQL}
+            {unload_ctx['join_sql']}
+            WHERE {unload_ctx['where_sql']}
+            GROUP BY
+                ulh.salesman_id
+        )
+        SELECT
+            s.osa_code AS van_code,
+            s.name AS salesman,
+            rt.route_name,
+            COALESCE(l.loaded, 0) AS loaded,
+            COALESCE(sd.sales_qty, 0) AS sales_qty,
+            COALESCE(sd.amount, 0) AS amount,
+            COALESCE(u.unloaded, 0) AS unloaded
+        FROM salesman s
+        LEFT JOIN tbl_route rt ON rt.id = s.route_id
+        LEFT JOIN loaded_data l ON l.salesman_id = s.id
+        LEFT JOIN sold_data sd ON sd.salesman_id = s.id
+        LEFT JOIN unload_data u ON u.salesman_id = s.id
     """
 
     rows = db.execute(text(query), params).fetchall()
-    sku_fulfillment = [dict(r._mapping)for r in rows]
-    total_loaded = sum(x["loaded"] or 0 for x in sku_fulfillment)
-    total_unloaded = sum(x["unloaded"] or 0 for x in sku_fulfillment)
-    total_in_van = (total_loaded - total_unloaded)
-    return {
-        "summary": {
-            "loaded": round(total_loaded, 2),
-            "unloaded": round(total_unloaded, 2),
-            "in_van": round(total_in_van, 2),
-        },
-        "sku_fulfillment": sku_fulfillment
-    }
+    result = []
+    for row in rows:
+        loaded = float(row.loaded or 0)
+        sales_qty = float(row.sales_qty or 0)
+        amount = float(row.amount or 0)
+        unloaded = float(row.unloaded or 0)
+        result.append({
+            "van_code": row.van_code,
+            "salesman": row.salesman,
+            "route_name": row.route_name,
+            "loaded": loaded,
+            "sales_qty": sales_qty,
+            "amount": amount,
+            "unload": unloaded,
+        })
+    return result
+
+
+@router.post("/recent-order")
+def recent_order(payload:SalesDashboardKpisRequest, db:Session = Depends(get_db)):
+    order_ctx = order_prepare_dashboard_context(payload)
+    quantity = order_quantity_expr_sql()
+    amount = "ROUND(SUM(od.total)::numeric, 2)"
+
+    query = f"""
+            SELECT
+            oh.order_code,
+            ac.name AS customer,
+            s.name AS salesman,
+            {quantity} AS qty,
+            TO_CHAR(oh.created_at, 'HH24:MI') AS time,
+            {amount} AS amount,
+            'CREATED' AS status
+        {ORDER_JOIN_SQL}
+        {order_ctx['join_sql']}
+        WHERE {order_ctx['where_sql']}
+        GROUP BY
+            oh.order_code,
+            ac.name,
+            s.name,
+            oh.created_at
+        ORDER BY oh.created_at DESC
+        LIMIT 6
+    """
+    rows = db.execute(text(query), order_ctx['params']).fetchall()
+    response = []
+
+    for row in rows:
+        data = dict(row._mapping)
+        response.append({
+            "order_code": data["order_code"],
+            "customer": data["customer"],
+            "salesman": data["salesman"],
+            "qty": int(data["qty"] or 0),
+            "time": data["time"],
+            "amount": float(data["amount"] or 0),
+            "status": data["status"]
+        })
+    return response

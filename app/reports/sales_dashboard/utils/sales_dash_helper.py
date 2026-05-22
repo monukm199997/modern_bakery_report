@@ -103,9 +103,12 @@ def return_quantity_expr_sql():
     return """
     ROUND(
         SUM(
-            rd.item_quantity 
-        )::numeric,
-        2
+            CASE
+                WHEN iu.upc IS NULL THEN 0
+                ELSE rd.item_quantity::numeric * iu.upc::numeric
+            END
+        ),
+        6
     )
     """
 
@@ -156,11 +159,14 @@ def order_build_query_parts(payload: SalesDashboardKpisRequest):
 
 def order_quantity_expr_sql():
     return """
-    ROUND(
+   ROUND(
         SUM(
-            od.quantity 
-        )::numeric,
-        2
+            CASE
+                WHEN iu.upc IS NULL THEN 0
+                ELSE od.quantity::numeric * iu.upc::numeric
+            END
+        ),
+        6
     )
     """
 
@@ -211,11 +217,14 @@ def delivery_build_query_parts(payload: SalesDashboardKpisRequest):
 
 def delivery_quantity_expr_sql():
     return """
-    ROUND(
+   ROUND(
         SUM(
-            dd.quantity 
-        )::numeric,
-        2
+            CASE
+                WHEN iu.upc IS NULL THEN 0
+                ELSE dd.quantity::numeric * iu.upc::numeric
+            END
+        ),
+        6
     )
     """
 
@@ -243,7 +252,7 @@ def load_build_query_parts(payload):
     where_fragments = []
     params = {}
 
-    where_fragments.append("lh.created_at BETWEEN :from_date AND :to_date")
+    where_fragments.append("lh.accept_time >= :from_date AND lh.accept_time < (CAST(:to_date AS DATE) + INTERVAL '1 day')")
     params["from_date"] = payload.from_date
     params["to_date"] = payload.to_date
 
@@ -268,9 +277,12 @@ def load_quantity_expr_sql():
     return """
     ROUND(
         SUM(
-            ld.qty 
-        )::numeric,
-        2
+            CASE
+                WHEN iu.upc IS NULL THEN 0
+                ELSE ld.qty::numeric * iu.upc::numeric
+            END
+        ),
+        6
     )
     """
 
@@ -321,9 +333,12 @@ def unload_quantity_expr_sql():
     return """
     ROUND(
         SUM(
-            uld.qty 
-        )::numeric,
-        2
+            CASE
+                WHEN iu.upc IS NULL THEN 0
+                ELSE uld.qty::numeric * iu.upc::numeric
+            END
+        ),
+        6
     )
     """
 
@@ -512,29 +527,3 @@ def get_sales_performance_data(db, payload):
     }
 
     return response
-
-def visit_plan_build_query_parts(payload):
-    joins = []
-    where_fragments = []
-    params = {}
-
-    where_fragments.append("vp.created_at BETWEEN :from_date AND :to_date")
-    params["from_date"] = payload.from_date
-    params["to_date"] = payload.to_date
-
-    if payload.company_ids:
-        joins.append("LEFT JOIN tbl_route rt ON rt.id = vp.route_id")
-        where_fragments.append("s.company_id = ANY(:company_ids)")
-        params["company_ids"] = payload.company_ids
-
-    if payload.region_ids:
-        joins.append("LEFT JOIN tbl_route rt ON rt.id = vp.route_id")
-        where_fragments.append("rt.region_id = ANY(:region_ids)")
-        params["region_ids"] = payload.region_ids
-
-    if payload.route_ids:
-        where_fragments.append("vp.route_id = ANY(:route_ids)")
-        params["route_ids"] = payload.route_ids
-
-    joins = list(dict.fromkeys(joins))
-    return joins, where_fragments, params

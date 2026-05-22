@@ -3,14 +3,18 @@ RETURN_BASE_SQL = """
         FROM return_header rh
         LEFT JOIN return_details rd ON rd.header_id = rh.id
         LEFT JOIN salesman s ON s.id = rh.salesman_id
+        LEFT JOIN item_uoms iu
+                ON iu.item_id = rd.item_id
+                AND iu.uom_id = rd.uom_id
         """
-    #         LEFT JOIN item_uoms iu
-    #             ON iu.item_id = rd.item_id
-    #             AND iu.uom_id = rd.uom_id
+  
 SALES_BASE_SQL = """
         FROM invoice_headers ih
             LEFT JOIN invoice_details id ON id.header_id = ih.id
             LEFT JOIN salesman s ON s.id = ih.salesman_id
+            LEFT JOIN item_uoms iu
+                ON iu.item_id = id.item_id
+                AND iu.uom_id = id.uom
         """
 
 ORDER_BASE_SQL = """
@@ -42,6 +46,9 @@ SALES_REGION_JOINS_SQL = """
 SALES_BASE_SQL_1 = """
         FROM invoice_headers ih
             LEFT JOIN invoice_details id ON id.header_id = ih.id
+            LEFT JOIN item_uoms iu
+                ON iu.item_id = id.item_id
+                AND iu.uom_id = id.uom
         """
 RETURN_CHANNEL_JOINS_SQL = """
                 LEFT JOIN agent_customers cst ON cst.id = rh.customer_id
@@ -121,6 +128,9 @@ SALESMAN_COUNT = """
 FROM_CLAUSE_1 = """
         FROM invoice_headers ih
         JOIN invoice_details id ON id.header_id = ih.id
+        LEFT JOIN item_uoms iu
+                ON iu.item_id = id.item_id
+                AND iu.uom_id = id.uom
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
         LEFT JOIN tbl_region r ON r.id = rt.region_id
     """
@@ -147,92 +157,66 @@ SELECT_1 = f"""
             {PERFORMANCE_SCORE}
         """
 
-
-TOTAL_AND_COMPLETE_STOPS = """
-        COUNT(*) AS total_stops,
-        COUNT(
-            CASE
-                WHEN vp.shop_status = '1' 
-                THEN 'completed'
-            END
-            ) AS completed_stops
-        """
-
-VISIT_BASE_JOIN = """
-            FROM visit_plan vp
-                LEFT JOIN salesman s ON s.id = vp.salesman_id
-        """
-
-VISIT_SELECT_FIELS = """
-        TO_CHAR(
-            vp.visit_start_time,
-            'HH24:MI'
-            ) AS visit_time,
-            ac.name AS customer_name,
-            oc.outlet_channel AS channel,
-            vp.shop_status,
-            vp.latitude,
-            vp.longitude,
-        """
-
-VISITE_JOINS_SQL = """
-        LEFT JOIN agent_customers ac ON ac.id = vp.customer_id
-            LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
-            LEFT JOIN invoice_headers ih ON ih.customer_id = vp.customer_id
-            LEFT JOIN invoice_details id ON id.header_id = ih.id
-        """
-
-VISIT_GROUP_BY = """
-        vp.visit_start_time,
-        ac.name,
-        oc.outlet_channel,
-        vp.shop_status,
-        vp.latitude,
-        vp.longitude
+SALES_OVERVIEW_JOIN_SQL = """
+        FROM invoice_headers ih
+        LEFT JOIN invoice_details id ON id.header_id = ih.id
+        LEFT JOIN item_uoms iu ON iu.item_id = id.item_id
+        AND iu.uom_id = id.uom
+    """
+RETURN_OVERVIEW_JOIN_SQL = """
+        FROM return_header rh
+        LEFT JOIN return_details rd ON rd.header_id = rh.id
+        LEFT JOIN item_uoms iu
+                ON iu.item_id = rd.item_id
+                AND iu.uom_id = rd.uom_id
     """
 
-VAN_INFO = """
-        s.id AS salesman_id,
-        rt.route_name,
-        s.name AS salesman_name,
-        COUNT(
-            DISTINCT vp.customer_id
-        ) AS assigned_customers
+VAN_ROUTE_SELECT_SQL = """
+        ih.salesman_id,
+        s.osa_code AS van_id,
+        s.name AS salesman,
+        ac.name AS customer_name,
+        ih.invoice_time,
+        ac.latitude,
+        ac.longitude,
     """
 
-VAN_INFO_GROUP_BY = """
-        rt.route_name,
+VAN_ROUTE_GROUP_BY = """
+        ih.salesman_id,
+        s.osa_code,
         s.name,
-        s.id
-    """
-VAN_INFO_SELECT = """
-        (
-        SELECT json_agg(v)
-            FROM van_info v
-        ) AS van_info
-    """
-SUMMURY_SELECT = """
-        (
-        SELECT row_to_json(s)
-        FROM (
-            SELECT
-                completed_stops,
-                total_stops,
-                ROUND((completed_stops::numeric / NULLIF(total_stops, 0) ) * 100, 1) AS progress_percentage
-                FROM summary
-            ) s
-        ) AS summary
+        rt.route_name,
+        ac.name,
+        ih.invoice_time,
+        ac.latitude,
+        ac.longitude
     """
 
-TIMELINE_SELECT = """
-        (
-        SELECT json_agg(t)
-        FROM timeline t
-        ) AS timeline
+
+LOADED_DATA_JOIN_SQL = """
+        FROM tbl_load_header lh
+        LEFT JOIN tbl_load_details ld ON ld.header_id = lh.id
+        LEFT JOIN salesman s ON s.id = lh.salesman_id
+        LEFT JOIN item_uoms iu
+            ON iu.item_id = ld.item_id
+            AND iu.uom_id = ld.uom
     """
 
-VISIT_FINAL_SELECT = f"""
-        {VAN_INFO_SELECT},
-        {SUMMURY_SELECT},
-        {TIMELINE_SELECT}
+UNLOADED_DATA_JOIN_SQL = """
+        FROM tbl_unload_header ulh
+        LEFT JOIN tbl_unload_detail uld ON uld.header_id = ulh.id
+        LEFT JOIN salesman s ON s.id = ulh.salesman_id
+        LEFT JOIN item_uoms iu
+            ON iu.item_id = uld.item_id
+            AND iu.uom_id = uld.uom
+    """
+
+ORDER_JOIN_SQL = """
+        FROM agent_order_headers oh
+        LEFT JOIN agent_order_details od ON od.header_id = oh.id
+        LEFT JOIN salesman s ON s.id = oh.salesman_id
+        LEFT JOIN item_uoms iu
+                ON iu.item_id = od.item_id
+                AND iu.uom_id = od.uom_id
+        LEFT JOIN agent_customers ac ON ac.id = oh.customer_id
     """

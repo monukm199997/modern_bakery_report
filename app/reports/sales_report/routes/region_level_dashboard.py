@@ -224,7 +224,7 @@ def salesman_comparison(payload:SalesReportRequest, db:Session = Depends(get_db)
             s.name AS salesman_name,
             {ctx['value_expr']} AS value,
             COUNT(DISTINCT ih.id) AS invoice_count,
-            COUNT(DISTINCT ih.customer_id) AS customer_count,
+            COUNT(DISTINCT ih.customer_id) AS customer_count
         {BASE_SQL}
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
