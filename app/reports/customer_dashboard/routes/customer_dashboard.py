@@ -1,165 +1,124 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from app.core.database import get_db
-from app.reports.customer_dashboard.schemas.schemas import CustomerDashboardRequest
-from app.utils.helper import validate_mandatory, choose_granularity, quantity_expr_sql
-from app.reports.customer_dashboard.utils.cust_dash_helper import get_invoice_date
 from app.dependencies.auth import get_current_user
-from app.reports.customer_dashboard.utils.query_helper import (
-    TOTAL_CUSTOMER_IN_CATEGORY,
-    TOTAL_CUSTOMER_IN_CHANNEL,
-    TOTAL_CUSTOMER_IN_REGION,
-    TOTAL_CUSTOMER_IN_ROUTE,
-    TOTAL_PENDING_CUSTOMER,
-    TOTAL_NEW_CUSTOMER,
-    TOTAL_CUSTOMER,
-    BASE_SQL,
+from app.reports.customer_dashboard.schemas.schemas import CustomerDashRequest
+from app.reports.customer_dashboard.utils.cust_dash_helper import (
+    get_trend_line,
+    get_active_customers,
+    get_new_customers,
+    get_at_risk_customers,
+    get_inactive_customers,
+    get_avg_sales_value,
+    get_customer_growth,
+    get_customer_coverage,
+    get_sales_returns,
+    customer_health,
+    customer_health_histogram,
+    get_risk_customers,
+    get_inactive_customer,
+    get_top_customers,
+    get_region_customers,
+    get_route_customers,
+    get_channel_customers,
+    get_categories_customers,
+    get_top_100_customers,
+    get_outstanding_recovery,
 )
 
 router = APIRouter(tags=["Customer Dashboard"], dependencies=[Depends(get_current_user)])
-quantity = quantity_expr_sql()
-
-
-@router.get("/kpis")
-def customer_dash_kpis(db: Session = Depends(get_db)):
-    query = f"""
-            SELECT
-                {TOTAL_CUSTOMER},
-                {TOTAL_PENDING_CUSTOMER},
-                {TOTAL_NEW_CUSTOMER}     
-            """
-    rows = db.execute(text(query)).fetchone()
-    result = {
-        "total_customer": rows.total_customer,
-        "total_pending_customer": rows.total_pending_customer,
-        "total_new_customer": rows.total_new_customer,
-    }
-    return result
-
 
 @router.post("/sales-trend-line")
-def sales_trend_line(payload: CustomerDashboardRequest, db: Session = Depends(get_db)):
-    validate_mandatory(payload)
-    where_fragments, params = get_invoice_date(payload)
-    invoice_date = " AND ".join(where_fragments)
-    granularity, period_label_sql, order_by_sql = choose_granularity(
-        payload.from_date, payload.to_date
-    )
-    query = f"""
-        SELECT
-                {period_label_sql} AS period_label,
-                {quantity} AS value
-            {BASE_SQL}
-            WHERE {invoice_date}
-            GROUP BY {period_label_sql},{order_by_sql}
-            ORDER BY {order_by_sql}
-        """
-    rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return {"granularity": granularity, "sales_trend_line": result}
-
-
-@router.post("/top-customer-trendline")
-def top_customer_trendline(
-    payload: CustomerDashboardRequest, db: Session = Depends(get_db)
-):
-    validate_mandatory(payload)
-    where_fragments, params = get_invoice_date(payload)
-    invoice_date = " AND ".join(where_fragments)
-    granularity, period_label_sql, order_by_sql = choose_granularity(
-        payload.from_date, payload.to_date
-    )
-
-    query = f"""
-            SELECT
-                {period_label_sql} AS period_label,
-                ac.name AS customer_name,
-                {quantity} AS value
-            {BASE_SQL}
-            LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-            WHERE {invoice_date}
-            GROUP BY {period_label_sql},{order_by_sql}, ac.name
-            ORDER BY value DESC
-            LIMIT 20
-        """
-    rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return {"granularity": granularity, "top_customer_trend_line": result}
-
-
+def sales_trend_line(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+    return get_trend_line(payload, db)
 @router.post("/region-customer")
-def region_customer(payload: CustomerDashboardRequest, db: Session = Depends(get_db)):
-    validate_mandatory(payload)
-    where_fragments, params = get_invoice_date(payload)
-    invoice_date = " AND ".join(where_fragments)
-
-    query = f"""
-            SELECT
-            {TOTAL_CUSTOMER_IN_REGION}
-            WHERE {invoice_date}
-            GROUP BY r.region_name
-            ORDER BY total_customers DESC
-        """
-    rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
-
+def region_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+    return get_region_customers(payload, db)
 
 @router.post("/route-customer")
-def route_customer(payload:CustomerDashboardRequest, db:Session = Depends(get_db)):
-    validate_mandatory(payload)
-    where_fragments, params = get_invoice_date(payload)
-    invoice_date = " AND ".join(where_fragments)
-
-    query = f"""
-        SELECT
-        {TOTAL_CUSTOMER_IN_ROUTE}
-        WHERE {invoice_date}
-        GROUP BY rt.route_name
-        ORDER BY total_customers DESC
-        """
-    rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
-
+def route_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+    return get_route_customers(payload, db)
 
 @router.post("/channel-customer")
-def channel_customer(payload:CustomerDashboardRequest, db:Session = Depends(get_db)):
-    validate_mandatory(payload)
-    where_fragments, params = get_invoice_date(payload)
-    invoice_date = " AND ".join(where_fragments)
-
-    query = f"""
-            SELECT
-            {TOTAL_CUSTOMER_IN_CHANNEL}
-            WHERE {invoice_date}
-            GROUP BY oc.outlet_channel
-            ORDER BY total_customers DESC
-        """
-    rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
-
+def channel_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+    return get_channel_customers(payload, db)
 
 @router.post("/category-customer")
-def category_customer(payload:CustomerDashboardRequest, db:Session = Depends(get_db)):
-    validate_mandatory(payload)
-    where_fragments, params = get_invoice_date(payload)
-    invoice_date = " AND ".join(where_fragments)
+def category_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+    return get_categories_customers(payload, db)
 
-    query = f"""
-            SELECT
-            {TOTAL_CUSTOMER_IN_CATEGORY}
-            WHERE {invoice_date}
-            GROUP BY cc.customer_category_name
-            ORDER BY total_customers DESC
-        """
-    rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
+@router.post("/customer-dashboard-kpis")
+def customer_dashboard_kpis(payload: CustomerDashRequest, db:Session = Depends(get_db)):
+    return {
+        "total_active_customers": get_active_customers(payload, db),
+        "new_customers": get_new_customers(payload, db),
+        "at_risk_customers": get_at_risk_customers(payload, db),
+        "inactive_customers": get_inactive_customers(payload, db),
+        "avg_sales_value": get_avg_sales_value(payload,db),
+    }
 
-@router.post("/top-customer")
-def top_customer(payload:CustomerDashboardRequest, db:Session = Depends(get_db)):
-    pass
-# TOP 100 customer query sales, exchange ...
+@router.post("/customer-growth")
+def customer_growth(payload: CustomerDashRequest, db:Session = Depends(get_db)):
+    return {
+        "growth": get_customer_growth(payload, db),
+        "coverage": get_customer_coverage(payload, db),
+        "sales_returns": get_sales_returns(payload, db)
+    }
+
+@router.post("/customer-health")
+def customer_health_dashboard(payload: CustomerDashRequest, db:Session = Depends(get_db)):
+
+    summary = customer_health(payload, db)
+    histogram = customer_health_histogram(payload, db)
+
+    return {
+        "healthy": summary["healthy"],
+        "warning": summary["warning"],
+        "critical": summary["critical"],
+        "histogram": histogram
+    }
+
+@router.post("/smart-alerts")
+def smart_alerts(payload: CustomerDashRequest, db:Session = Depends(get_db) ):
+    alerts = []
+    inactive_count = get_inactive_customer(payload, db)
+
+    if inactive_count:
+        alerts.append({
+            "level": "info",
+            "text": f"{inactive_count:,} customers inactive for 7+ days",
+            "count": inactive_count
+        })
+
+    risk_count = get_risk_customers(payload, db)
+
+    if risk_count:
+        alerts.append({
+            "level": "warning",
+            "text": f"{risk_count:,} high outstanding-risk customers",
+            "count": risk_count
+        })
+
+    return alerts
+
+@router.post("/top-customers")
+def top_customers(payload: CustomerDashRequest,db:Session = Depends(get_db)):
+    return get_top_customers(payload, db)
+
+@router.post("/top-100-customers")
+def top_100_customers(
+    payload: CustomerDashRequest,
+    db:Session = Depends(get_db),
+    page: int = 1,
+    page_size: int = 100
+):
+    return get_top_100_customers(payload, db, page, page_size)
+
+@router.post("/outstanding-recovery")
+def outstanding_recovery(
+    payload: CustomerDashRequest,
+    db:Session = Depends(get_db),
+    page: int = 1,
+    page_size: int = 10
+):
+    return  get_outstanding_recovery(payload, db, page, page_size)

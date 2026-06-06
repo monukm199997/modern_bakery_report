@@ -1,26 +1,4 @@
 
-TOTAL_CUSTOMER = """
-            (
-            SELECT COUNT(DISTINCT ih.customer_id) 
-            FROM invoice_headers ih 
-            ) AS total_customer
-        """
-
-TOTAL_PENDING_CUSTOMER = """
-            (
-            SELECT COUNT(DISTINCT nc.id)
-            FROM new_customer nc
-            WHERE nc.status = 0
-            ) AS total_pending_customer
-        """
-
-TOTAL_NEW_CUSTOMER = """
-            (
-            SELECT COUNT (DISTINCT ac.id) 
-            FROM agent_customers ac
-            ) AS total_new_customer
-        """
-
 BASE_SQL = """
         FROM invoice_headers ih
         LEFT JOIN invoice_details id ON id.header_id = ih.id
@@ -35,10 +13,7 @@ TOTAL_CUSTOMER_IN_REGION = """
             ROUND(
                 COUNT(DISTINCT ih.customer_id)*100.0 /
                 SUM(COUNT(DISTINCT ih.customer_id)) OVER (),2
-            ) AS percentage
-        FROM invoice_headers ih
-        LEFT JOIN tbl_route rt ON rt.id = ih.route_id
-        LEFT JOIN tbl_region r ON r.id = rt.region_id
+            ) AS percentage,
     """
 
 TOTAL_CUSTOMER_IN_ROUTE = """
@@ -47,9 +22,7 @@ TOTAL_CUSTOMER_IN_ROUTE = """
             ROUND(
                 COUNT(DISTINCT ih.customer_id)*100.0 /
                 SUM(COUNT(DISTINCT ih.customer_id)) OVER (),2
-            ) AS percentage
-        FROM invoice_headers ih
-        JOIN tbl_route rt ON rt.id = ih.route_id
+            ) AS percentage,
     """
 
 TOTAL_CUSTOMER_IN_CHANNEL = """
@@ -58,10 +31,8 @@ TOTAL_CUSTOMER_IN_CHANNEL = """
             ROUND(
                 COUNT(DISTINCT ih.customer_id)*100.0 /
                 SUM(COUNT(DISTINCT ih.customer_id)) OVER (),2
-            ) AS percentage
-        FROM invoice_headers ih
-        JOIN agent_customers ac ON ac.id = ih.customer_id
-        JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
+            ) AS percentage,
+        
     """
 
 TOTAL_CUSTOMER_IN_CATEGORY = """
@@ -70,8 +41,5 @@ TOTAL_CUSTOMER_IN_CATEGORY = """
             ROUND(
                 COUNT(DISTINCT ih.customer_id)*100.0 /
                 SUM(COUNT(DISTINCT ih.customer_id)) OVER (),2
-            ) AS percentage
-        FROM invoice_headers ih
-        JOIN agent_customers ac ON ac.id = ih.customer_id
-        JOIN customer_categories cc ON cc.id = ac.category_id
+            ) AS percentage,
     """

@@ -23,7 +23,9 @@ from app.reports.sales_comparison_report.routes.sales_comparison_table import ro
 from app.reports.sales_comparison_report.routes.sales_comparison_export import router as sales_comparison_export
 from app.reports.sales_comparison_report.routes.sales_comparison_dashboard import router as sales_comparison_dashboard
 
-
+from app.reports.vehicles_report.routes.vehicles_tableview import router as vehicles_tableview
+from app.reports.vehicles_report.routes.vehicles_export import router as vehicles_export
+from app.reports.vehicles_report.routes.vehicles_dashboard import router as vehicles_dashboard
 
 
 app = FastAPI(title="Modern Bakery Reports API")
@@ -50,6 +52,10 @@ app.include_router(target_commison_table, prefix="/api/target-commison-report")
 app.include_router(sales_comparison_table, prefix="/api/sales-comparison-report")
 app.include_router(sales_comparison_export, prefix="/api/sales-comparison-report")
 app.include_router(sales_comparison_dashboard, prefix="/api/sales-comparison-report")
+
+app.include_router(vehicles_tableview, prefix="/api/vehicles-report")
+app.include_router(vehicles_export, prefix="/api/vehicles-report")
+app.include_router(vehicles_dashboard, prefix="/api/vehicles-report")
 
 
 

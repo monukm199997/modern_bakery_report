@@ -17,7 +17,7 @@ from app.reports.target_commison_report.routes.target_commison_export import (
     fetch_sales_data,
     fetch_returns_data,
     fetch_target_data,
-    compute_region_rows,
+    compute_grouped_rows,
 )
 
 
@@ -35,7 +35,7 @@ def _salesman_row(region: str, item: dict) -> dict:
     return {
         "row_type": "salesman",
         "region": region,
-        "route": item["route_name"] or "",
+        "route": item["route_code"] or "",
         "code": item["osa_code"] or "",
         "salesman": item["salesman"] or "",
         "daily": {
@@ -77,7 +77,6 @@ def _build_total(
     projected: float,
     monthly_target: float,
 ) -> dict:
-    """Generic total-row builder used for region totals and grand total."""
     daily_ret_pct = (daily_returns / daily_sales * 100) if daily_sales else 0
     mtd_ret_pct = (mtd_returns / mtd_sales * 100) if mtd_sales else 0
     daily_ach = (daily_net / daily_target * 100) if daily_target else 0
@@ -128,8 +127,16 @@ def sales_achievement_table(
     return_data = fetch_returns_data(db, ctxs["returns"], payload.to_date)
     target_data = fetch_target_data(db, ctxs["target"])
 
-    region_data = compute_region_rows(
+    # Auto-switch grouping: channel_ids present -> tabs/totals by channel.
+    use_channel = bool(payload.channel_ids)
+    group_by = "channel" if use_channel else "region"
+    total_row_type = (
+        "channel_total" if use_channel else "region_total"
+    )
+
+    grouped_data = compute_grouped_rows(
         sales_data, return_data, target_data,
+        group_by=group_by,
         total_days=total_days,
         current_day=current_day,
     )
@@ -145,8 +152,8 @@ def sales_achievement_table(
         "projected": 0, "monthly_target": 0,
     }
 
-    for region, items in region_data.items():
-        # Per-region accumulators
+    for group_value, items in grouped_data.items():
+        # Per-group accumulators
         t = {
             "daily_sales": 0, "daily_returns": 0, "daily_net": 0,
             "daily_target": 0,
@@ -156,7 +163,7 @@ def sales_achievement_table(
         }
 
         for item in items:
-            rows.append(_salesman_row(region, item))
+            rows.append(_salesman_row(group_value, item))
             t["daily_sales"] += item["daily_sales"]
             t["daily_returns"] += item["daily_returns"]
             t["daily_net"] += item["daily_net"]
@@ -169,9 +176,9 @@ def sales_achievement_table(
             t["monthly_target"] += item["monthly_target"]
 
         rows.append(_build_total(
-            label=f"{region} TOTAL",
-            region=region,
-            row_type="region_total",
+            label=f"{group_value} TOTAL",
+            region=group_value,
+            row_type=total_row_type,
             daily_sales=t["daily_sales"],
             daily_returns=t["daily_returns"],
             daily_net=t["daily_net"],
@@ -184,7 +191,7 @@ def sales_achievement_table(
             monthly_target=t["monthly_target"],
         ))
 
-        # Fold region totals into grand total
+        # Fold group totals into grand total
         for k in g:
             g[k] += t[k]
 
@@ -211,6 +218,7 @@ def sales_achievement_table(
             "total_days_in_month": total_days,
             "current_day": current_day,
             "row_count": len(rows),
+            "group_by": group_by,  # "region" or "channel" — frontend can use this to style
         },
         "rows": rows,
     }

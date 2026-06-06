@@ -27,11 +27,12 @@ router = APIRouter(tags=["Target Commission Report"], dependencies=[Depends(get_
 def fetch_sales_data(db: Session, ctx: dict, to_date: str):
     sql = f"""
         SELECT
-            rg.region_name      AS region,
-            rt.route_name       AS route_name,
-            s.id                AS salesman_id,
-            s.name              AS salesman_name,
-            s.osa_code          AS osa_code,
+            rg.region_name        AS region,
+            COALESCE(oc.outlet_channel, '(No Channel)') AS channel,
+            rt.route_code         AS route_code,
+            s.id                  AS salesman_id,
+            s.name                AS salesman_name,
+            s.osa_code            AS osa_code,
             COALESCE(ROUND(
                 SUM(CASE
                     WHEN DATE(ih.invoice_date) = :daily_date
@@ -42,12 +43,14 @@ def fetch_sales_data(db: Session, ctx: dict, to_date: str):
             COALESCE(ROUND(SUM({ctx['quantity']}), 6), 0) AS cumulative_sales
         FROM invoice_headers ih
         LEFT JOIN invoice_details id ON id.header_id = ih.id
-        LEFT JOIN salesman      s   ON s.id = ih.salesman_id
-        LEFT JOIN item_uoms     iu  ON iu.item_id = id.item_id
+        LEFT JOIN salesman       s  ON s.id = ih.salesman_id
+        LEFT JOIN outlet_channel oc ON oc.id = s.channel_id
+        LEFT JOIN item_uoms      iu ON iu.item_id = id.item_id
                                    AND iu.uom_id  = id.uom
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
-        GROUP BY rg.region_name, rt.route_name, s.id, s.name, s.osa_code
+        GROUP BY rg.region_name, oc.outlet_channel, rt.route_code,
+                 s.id, s.name, s.osa_code
         ORDER BY rg.region_name, s.name
     """
     params = {**ctx["params"], "daily_date": to_date}
@@ -58,10 +61,11 @@ def fetch_returns_data(db: Session, ctx: dict, to_date: str):
     sql = f"""
         SELECT
             rg.region_name AS region,
+            COALESCE(oc.outlet_channel, '(No Channel)') AS channel,
             s.id           AS salesman_id,
             s.name         AS salesman_name,
             s.osa_code     AS osa_code,
-            rt.route_name  AS route_name,
+            rt.route_code  AS route_code,
             COALESCE(ROUND(
                 SUM(CASE
                     WHEN DATE(rh.created_at) = :daily_date
@@ -73,11 +77,13 @@ def fetch_returns_data(db: Session, ctx: dict, to_date: str):
         FROM return_header rh
         LEFT JOIN return_details rd ON rd.header_id = rh.id
         LEFT JOIN salesman       s  ON s.id = rh.salesman_id
+        LEFT JOIN outlet_channel oc ON oc.id = s.channel_id
         LEFT JOIN item_uoms      iu ON iu.item_id = rd.item_id
                                    AND iu.uom_id  = rd.uom_id
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
-        GROUP BY rg.region_name, s.id, s.name, s.osa_code, rt.route_name
+        GROUP BY rg.region_name, oc.outlet_channel, s.id, s.name, s.osa_code,
+                 rt.route_code
     """
     params = {**ctx["params"], "daily_date": to_date}
     return db.execute(text(sql), params).mappings().all()
@@ -87,34 +93,39 @@ def fetch_target_data(db: Session, ctx: dict):
     sql = f"""
         SELECT
             rg.region_name AS region,
+            COALESCE(oc.outlet_channel, '(No Channel)') AS channel,
             s.id           AS salesman_id,
             s.name         AS salesman_name,
             s.osa_code     AS osa_code,
-            rt.route_name  AS route_name,
+            rt.route_code  AS route_code,
             COALESCE(SUM(tc.total_target_amount), 0) AS target
         FROM target_commison tc
         {ctx['join_sql']}
+        LEFT JOIN outlet_channel oc ON oc.id = s.channel_id
         WHERE {ctx['where_sql']}
-        GROUP BY rg.region_name, s.id, s.name, s.osa_code, rt.route_name
+        GROUP BY rg.region_name, oc.outlet_channel, s.id, s.name, s.osa_code,
+                 rt.route_code
     """
     return db.execute(text(sql), ctx["params"]).mappings().all()
 
 
-def compute_region_rows(sales_data, return_data, target_data,
-                        total_days: int, current_day: int):
-    """
-    Builds rows grouped by region. Uses the UNION of keys across the
-    three datasets so that a salesman with only returns or only a
-    target still appears in the report.
-    """
-    sales_map = {(r["region"], r["salesman_id"]): r for r in sales_data}
-    return_map = {(r["region"], r["salesman_id"]): r for r in return_data}
-    target_map = {(r["region"], r["salesman_id"]): r for r in target_data}
+# =====================================================================
+# AGGREGATION
+# =====================================================================
+
+def compute_grouped_rows(sales_data, return_data, target_data,
+                         group_by: str,
+                         total_days: int, current_day: int):
+
+    def key_of(r):
+        return (r.get(group_by) or "(Unknown)", r["salesman_id"])
+
+    sales_map = {key_of(r): r for r in sales_data}
+    return_map = {key_of(r): r for r in return_data}
+    target_map = {key_of(r): r for r in target_data}
 
     all_keys = set(sales_map) | set(return_map) | set(target_map)
 
-    # Salesman name + route_name may be missing in some sources; pick
-    # the first non-null we can find for display.
     def pick(key, field):
         for m in (sales_map, return_map, target_map):
             row = m.get(key)
@@ -122,10 +133,10 @@ def compute_region_rows(sales_data, return_data, target_data,
                 return row[field]
         return ""
 
-    region_data = defaultdict(list)
+    grouped = defaultdict(list)
 
     for key in all_keys:
-        region, salesman_id = key
+        group_value, salesman_id = key
         sales_row = sales_map.get(key, {})
         ret_row = return_map.get(key, {})
         tgt_row = target_map.get(key, {})
@@ -139,7 +150,6 @@ def compute_region_rows(sales_data, return_data, target_data,
         daily_net = daily_sales - daily_returns
         cumulative_net = cumulative_sales - cumulative_returns
 
-        # ---- Correct pro-rated targets (matches the printed report) ----
         daily_target = monthly_target / total_days if total_days else 0
         mtd_target = monthly_target * current_day / total_days if total_days else 0
 
@@ -153,15 +163,15 @@ def compute_region_rows(sales_data, return_data, target_data,
             (projected_sales / monthly_target * 100) if monthly_target else 0
         )
 
-        # Return % (visible in the printed report)
+        # Return %
         daily_ret_pct = (daily_returns / daily_sales * 100) if daily_sales else 0
         mtd_ret_pct = (
             cumulative_returns / cumulative_sales * 100
             if cumulative_sales else 0
         )
 
-        region_data[region].append({
-            "route_name": pick(key, "route_name"),
+        grouped[group_value].append({
+            "route_code": pick(key, "route_code"),
             "osa_code": pick(key, "osa_code"),
             "salesman": pick(key, "salesman_name"),
             "daily_sales": daily_sales,
@@ -181,33 +191,32 @@ def compute_region_rows(sales_data, return_data, target_data,
             "projected_ach": projected_ach,
         })
 
-    # Sort rows inside each region by salesman name for stable output
-    for region in region_data:
-        region_data[region].sort(key=lambda x: (x["salesman"] or "").lower())
+    for group_value in grouped:
+        grouped[group_value].sort(key=lambda x: (x["salesman"] or "").lower())
 
-    return region_data
+    return grouped
 
 
-# =====================================================================
-# WORKBOOK BUILDER
-# =====================================================================
+def compute_region_rows(sales_data, return_data, target_data,
+                        total_days: int, current_day: int):
+    """Backward-compat wrapper. Delegates to compute_grouped_rows."""
+    return compute_grouped_rows(
+        sales_data, return_data, target_data,
+        group_by="region",
+        total_days=total_days,
+        current_day=current_day,
+    )
 
-YELLOW = PatternFill(start_color="D9B300", end_color="D9B300", fill_type="solid")
-BLUE = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
-TOTAL = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")
+
+YELLOW = PatternFill(start_color="993442", end_color="993442", fill_type="solid")
+BLUE = PatternFill(start_color="CC6677", end_color="CC6677", fill_type="solid")
+TOTAL = PatternFill(start_color="CC6677", end_color="CC6677", fill_type="solid")
 THIN = Side(style="thin", color="000000")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-BOLD = Font(bold=True, size=10)
+BOLD = Font(bold=True, size=10, color="FFFFFF")
 CENTER = Alignment(horizontal="center", vertical="center")
 
-# Sub-header row (row 3) — matches the printed report column-for-column.
-# 18 columns total:
-#   A: Route
-#   B: Code (salesman.osa_code)
-#   C: Salesman
-#   D-I: DAILY block       (Sales, Returns, Retn %, Net Sales, Target, Achv %)
-#   J-O: CUMULATIVE block  (Sales, Returns, Retn %, Net Sales, Target, Achv %)
-#   P-R: MONTHLY block     (Achievement Projected, Target, Achv %)
+
 REGION_SUB_HEADERS = [
     "Route", "Code", "Salesman",
     "Sales", "Returns", "Retn %", "Net Sales", "Target", "Achv %",
@@ -254,16 +263,12 @@ def _auto_width(ws):
         try:
             column_letter = get_column_letter(col[0].column)
         except AttributeError:
-            # Skip merged cells
             continue
         for cell in col:
-            # Skip merged-anchor cells like the title (huge multi-line string)
             if isinstance(cell, MergedCell):
                 continue
             try:
                 if cell.value is not None:
-                    # Cap each cell's contribution so a long title or
-                    # region-total label doesn't blow out the column.
                     length = min(len(str(cell.value)), 25)
                     max_len = max(max_len, length)
             except Exception:
@@ -271,16 +276,11 @@ def _auto_width(ws):
         ws.column_dimensions[column_letter].width = max_len + 3
 
 
-def build_workbook(region_data, from_date: str, to_date: str):
+def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str = "Region"):
     wb = Workbook()
     wb.remove(wb.active)
 
-    # ------------------------------------------------------------
-    # SUMMARY SHEET
-    # ------------------------------------------------------------
     summary_ws = wb.create_sheet("Summary", 0)
-
-    # Title
     summary_ws.merge_cells(start_row=1, start_column=1,
                            end_row=1, end_column=len(SUMMARY_SUB_HEADERS))
     summary_ws.cell(1, 1, (
@@ -307,9 +307,10 @@ def build_workbook(region_data, from_date: str, to_date: str):
     summary_ws.cell(2, 8, "ESTIMATED MONTHLY SALES")
     _style_header(summary_ws.cell(2, 8))
 
-    # Sub-headers (row 3)
+    # Sub-headers (row 3) — first column label is dynamic ("Region" or "Channel")
     for col, header in enumerate(SUMMARY_SUB_HEADERS, 1):
-        _style_header(summary_ws.cell(3, col, header))
+        label = group_label if col == 1 else header
+        _style_header(summary_ws.cell(3, col, label))
 
     summary_row = 4
     grand = {
@@ -321,8 +322,8 @@ def build_workbook(region_data, from_date: str, to_date: str):
     # ------------------------------------------------------------
     # REGION SHEETS
     # ------------------------------------------------------------
-    for region, rows in region_data.items():
-        ws = wb.create_sheet((region or "Unknown")[:30])
+    for group_name, rows in grouped_data.items():
+        ws = wb.create_sheet((group_name or "Unknown")[:30])
 
         # Title (row 1)
         ws.merge_cells(start_row=1, start_column=1,
@@ -372,7 +373,7 @@ def build_workbook(region_data, from_date: str, to_date: str):
         for item in rows:
             # Order MUST match REGION_SUB_HEADERS
             _write_row(ws, row_idx, [
-                item["route_name"],
+                item["route_code"],
                 item["osa_code"],
                 item["salesman"],
                 # DAILY block
@@ -429,7 +430,7 @@ def build_workbook(region_data, from_date: str, to_date: str):
         )
 
         _write_row(ws, row_idx, [
-            f"{region} TOTAL", "", "",
+            f"{group_name} TOTAL", "", "",
             tot["daily_sales"],
             tot["daily_returns"],
             round(daily_ret_pct, 2),
@@ -451,7 +452,7 @@ def build_workbook(region_data, from_date: str, to_date: str):
 
         # ----- Summary sheet row for this region -----
         _write_row(summary_ws, summary_row, [
-            region,
+            group_name,
             tot["daily_net"],
             round(tot["daily_target"], 2),
             round(daily_pct, 2),
@@ -506,10 +507,6 @@ def build_workbook(region_data, from_date: str, to_date: str):
     return wb
 
 
-# =====================================================================
-# ROUTE
-# =====================================================================
-
 def _cleanup(path: str):
     try:
         os.remove(path)
@@ -534,25 +531,32 @@ def sales_achievement_export(
     return_data = fetch_returns_data(db, ctxs["returns"], payload.to_date)
     target_data = fetch_target_data(db, ctxs["target"])
 
-    region_data = compute_region_rows(
+    use_channel = bool(payload.channel_ids)
+    group_by = "channel" if use_channel else "region"
+    group_label = "Channel" if use_channel else "Region"
+    file_prefix = "sales_achievement_by_channel_" if use_channel else "sales_achievement_"
+
+    grouped_data = compute_grouped_rows(
         sales_data, return_data, target_data,
+        group_by=group_by,
         total_days=total_days,
         current_day=current_day,
     )
 
     wb = build_workbook(
-        region_data,
+        grouped_data,
         from_date=payload.from_date,
         to_date=payload.to_date,
+        group_label=group_label,
     )
 
     # Write to a temp file and let FastAPI delete it after sending.
-    fd, tmp_path = tempfile.mkstemp(suffix=".xlsx", prefix="sales_achievement_")
+    fd, tmp_path = tempfile.mkstemp(suffix=".xlsx", prefix=file_prefix)
     os.close(fd)
     wb.save(tmp_path)
 
     download_name = (
-        f"sales_achievement_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+        f"{file_prefix}{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
     )
 
     return FileResponse(

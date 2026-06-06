@@ -48,8 +48,7 @@ def _build_txn_query_parts(
     where_fragments = []
     params = {}
 
-    # Inclusive date range that survives timestamp columns:
-    # >= from_date 00:00 AND < (to_date + 1 day) 00:00
+
     where_fragments.append(
         f"{date_column} >= CAST(:from_date AS date) "
         f"AND {date_column} < CAST(:to_date AS date) + INTERVAL '1 day'"
@@ -64,6 +63,10 @@ def _build_txn_query_parts(
     if payload.region_ids:
         where_fragments.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
+
+    if payload.channel_ids:
+        where_fragments.append("s.channel_id = ANY(:channel_ids)")
+        params["channel_ids"] = payload.channel_ids
 
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params
@@ -128,6 +131,10 @@ def prepare_target_context(payload: SalesAchievementSchema):
     if payload.region_ids:
         where_fragments.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
+
+    if payload.channel_ids:
+        where_fragments.append("s.channel_id = ANY(:channel_ids)")
+        params["channel_ids"] = payload.channel_ids
 
     joins = list(dict.fromkeys(joins))
     return {
