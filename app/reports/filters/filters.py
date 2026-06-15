@@ -101,7 +101,7 @@ def get_regions(
     where = []
     params = {}
 
-    add_filter(where, params, "company_id", final_company_ids, "company_ids")
+    # add_filter(where, params, "company_id", final_company_ids, "company_ids")
     add_filter(where, params, "id", perms["region"], "region_ids")
 
     query = """
@@ -283,3 +283,4 @@ def get_customer(
     rows = db.execute(text(query), params).fetchall()
     result = [dict(r._mapping) for r in rows]
     return result
+
