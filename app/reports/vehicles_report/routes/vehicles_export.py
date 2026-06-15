@@ -15,23 +15,25 @@ from app.reports.vehicles_report.utils.vehicles_helper import prepare_dashboard_
 
 router = APIRouter(tags=["vehicles_report"], dependencies=[Depends(get_current_user)])
 
-DB_COLUMNS = ["trip_date", "trip_code", "start_odometer", "end_odometer", "distance_traveled"]
-HEADERS = ["Trip Date", "Trip Code", "Start Odometer", "End Odometer", "Total Distance"]
+DB_COLUMNS = ["trip_date", "trip_code", "vehicle_code", "vehicle_type", "start_odometer", "end_odometer", "distance_traveled"]
+HEADERS = ["Trip Date", "Trip Code","Vehicle Code", "Vehicle Type", "Start Odometer", "End Odometer", "Total Distance"]
 HEADER_FILL = PatternFill(start_color="FF993442", end_color="FF993442", fill_type="solid")
-HEADER_FONT = Font(color="FFFFFFFF", bold=True)  # white text reads better on #993442
-
+HEADER_FONT = Font(color="FFFFFFFF", bold=True)
 
 @router.post("/vehicle-export")
 def vehicle_export(payload: VehiclesRequest, db: Session = Depends(get_db)):
     ctx = prepare_dashboard_context(payload)
     query = f"""
         SELECT 
-            trip_date, 
-            trip_code, 
-            start_odometer, 
-            end_odometer, 
-            distance_traveled
+            tt.trip_date, 
+            tt.trip_code, 
+            tv.vehicle_code,
+            tv.vehicle_type,
+            tt.start_odometer, 
+            tt.end_odometer, 
+            tt.distance_traveled
         FROM tbl_trip tt
+        LEFT JOIN tbl_vehicle tv ON tv.id = tt.vehicle_id
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
         ORDER BY trip_date

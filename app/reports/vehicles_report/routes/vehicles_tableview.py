@@ -16,6 +16,7 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
 
     base_sql = f"""
             FROM tbl_trip tt
+            LEFT JOIN tbl_vehicle tv ON tv.id = tt.vehicle_id
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
         """
@@ -30,11 +31,13 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
 
     query = f"""
         SELECT
-            trip_date,
-            trip_code,
-            start_odometer,
-            end_odometer,
-            distance_traveled
+            tt.trip_date,
+            tt.trip_code,
+            tv.vehicle_code,
+            tv.vehicle_type,
+            tt.start_odometer,
+            tt.end_odometer,
+            tt.distance_traveled
         {base_sql}
         ORDER BY trip_date
         LIMIT :limit OFFSET :offset
