@@ -68,6 +68,12 @@ def build_query_parts(
         where_fragments.append("ih.salesman_id = ANY(:salesman_ids)")
         params["salesman_ids"] = payload.salesman_ids
 
+    if payload.customer_groups_ids:
+        where_fragments.append("ac.cust_group = ANY(:customer_groups_ids)")
+
+    if payload.super_wiser_ids:
+        where_fragments.append("s.superwiser_id = ANY(:super_wiser_ids)")\
+        
     return where_fragments, params
 
 

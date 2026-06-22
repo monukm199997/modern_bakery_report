@@ -15,8 +15,8 @@ from app.reports.vehicles_report.utils.vehicles_helper import prepare_dashboard_
 
 router = APIRouter(tags=["vehicles_report"], dependencies=[Depends(get_current_user)])
 
-DB_COLUMNS = ["trip_date", "trip_code", "vehicle_code", "vehicle_type", "start_odometer", "end_odometer", "distance_traveled"]
-HEADERS = ["Trip Date", "Trip Code","Vehicle Code", "Vehicle Type", "Start Odometer", "End Odometer", "Total Distance"]
+DB_COLUMNS = ["route", "salesman", "trip_date", "trip_code", "vehicle_no_plat", "vehicle_chesis_no", "vehicle_code", "vehicle_type", "start_odometer", "end_odometer", "distance_traveled"]
+HEADERS = ["Route", "Salesman", "Trip Date", "Trip Code", "Vehicle Number Plat", "Vehicle Chesis Number", "Vehicle Code", "Vehicle Type", "Start Odometer", "End Odometer", "Total Distance"]
 HEADER_FILL = PatternFill(start_color="FF993442", end_color="FF993442", fill_type="solid")
 HEADER_FONT = Font(color="FFFFFFFF", bold=True)
 
@@ -25,8 +25,12 @@ def vehicle_export(payload: VehiclesRequest, db: Session = Depends(get_db)):
     ctx = prepare_dashboard_context(payload)
     query = f"""
         SELECT 
+            rt.route_name AS route,
+            s.name AS salesman,
             tt.trip_date, 
             tt.trip_code, 
+            tv.number_plat AS vehicle_no_plat,
+            tv.vehicle_chesis_no,
             tv.vehicle_code,
             tv.vehicle_type,
             tt.start_odometer, 
@@ -35,6 +39,7 @@ def vehicle_export(payload: VehiclesRequest, db: Session = Depends(get_db)):
         FROM tbl_trip tt
         LEFT JOIN tbl_vehicle tv ON tv.id = tt.vehicle_id
         {ctx['join_sql']}
+        LEFT JOIN salesman s ON s.route_id = rt.id
         WHERE {ctx['where_sql']}
         ORDER BY trip_date
     """

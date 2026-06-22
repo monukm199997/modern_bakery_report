@@ -12,3 +12,5 @@ class SalesComparisonRequest(BaseModel):
     region_ids: Optional[List[int]] = None
     route_ids: Optional[List[int]] = None
     salesman_ids: Optional[List[int]] = None
+    customer_groups_ids: Optional[List[int]] = None
+    super_wiser_ids: Optional[List[int]] = None

@@ -17,7 +17,6 @@ def build_query_parts(payload: VehiclesRequest):
         params["route_ids"] = payload.route_ids
         
     if payload.salesman_ids:
-        joins.append("JOIN salesman s ON s.route_id = rt.id ")
         where_fragments.append("s.id = ANY(:salesman_ids)")
         params["salesman_ids"] = payload.salesman_ids
     joins = list(dict.fromkeys(joins))
