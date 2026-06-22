@@ -57,7 +57,6 @@ def load_static_filters():
         "item_category": [dict(r._mapping) for r in categories],
     }
 
-
 @router.get("/static")
 def get_static_filters(current_user=Depends(get_current_user)):
 
@@ -82,7 +81,6 @@ def get_static_filters(current_user=Depends(get_current_user)):
         ]
 
     return data
-
 
 @router.get("/regions")
 def get_regions(
@@ -119,7 +117,6 @@ def get_regions(
     result = [dict(r._mapping) for r in rows]
     return result
 
-
 @router.get("/routes")
 def get_routes(
     region_ids: Optional[str] = Query(None),
@@ -153,7 +150,6 @@ def get_routes(
     rows = db.execute(text(query), params).fetchall()
     result = [dict(r._mapping) for r in rows]
     return result
-
 
 @router.get("/salesmen")
 def get_salesmen(
@@ -215,7 +211,6 @@ def get_salesmen(
     result = [dict(r._mapping) for r in rows]
     return result
 
-
 @router.get("/items")
 def get_items(
     category_ids: Optional[str] = Query(None),
@@ -258,12 +253,12 @@ def get_customer(
     current_user=Depends(get_current_user),
     db:Session = Depends(get_db)
 ):
-    selected_category_ids = parse_csv_ids(outlet_channel_ids)
+    selected_outlet_channel_ids = parse_csv_ids(outlet_channel_ids)
     perms = get_user_permissions(current_user)
 
     final_outlet_channel_ids = apply_permission_filter(
-        selected_category_ids,
-        perms["item_category"]
+        selected_outlet_channel_ids,
+        perms["outlet_channel"]
     )
 
     where = []
@@ -283,4 +278,52 @@ def get_customer(
     rows = db.execute(text(query), params).fetchall()
     result = [dict(r._mapping) for r in rows]
     return result
+
+@router.get("/customer_group")
+def get_customer_group(
+    customer_ids: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    
+    if customer_ids:
+        customer_id_list = [int(x.strip()) for x in customer_ids.split(",")]
+        query = """
+            SELECT
+                id,
+                cust_group,
+                payment_type
+            FROM agent_customers
+            WHERE id = ANY(:customer_ids)
+            ORDER BY cust_group
+        """
+        rows = db.execute(text(query),{"customer_ids": customer_id_list}).fetchall()
+        return [dict(r._mapping) for r in rows]
+
+    query = """
+        SELECT DISTINCT
+            cust_group,
+            payment_type
+        FROM agent_customers
+        ORDER BY payment_type, cust_group
+    """
+    rows = db.execute(text(query)).fetchall()
+    return [dict(r._mapping) for r in rows]
+
+
+@router.get("/super_wiser")
+def get_super_wiser(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = """
+        SELECT
+            id,
+            name
+        FROM users 
+        WHERE role = 108
+        ORDER BY name
+    """
+    rows = db.execute(text(query)).fetchall()
+    return [dict(r._mapping) for r in rows]
 
