@@ -34,6 +34,7 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
         SELECT
             rt.route_name,
             s.name,
+            s.osa_code,
             tt.trip_date,
             tt.trip_code,
             tv.number_plat AS vehicle_no_plat,
