@@ -45,7 +45,7 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
             tt.end_odometer,
             tt.distance_traveled
         {base_sql}
-        ORDER BY trip_date
+        ORDER BY trip_date DESC
         LIMIT :limit OFFSET :offset
     """
     rows = db.execute(text(query), ctx['params']).fetchall()

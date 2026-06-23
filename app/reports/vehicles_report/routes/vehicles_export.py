@@ -42,7 +42,7 @@ def vehicle_export(payload: VehiclesRequest, db: Session = Depends(get_db)):
         {ctx['join_sql']}
         LEFT JOIN salesman s ON s.route_id = rt.id
         WHERE {ctx['where_sql']}
-        ORDER BY trip_date
+        ORDER BY trip_date DESC
     """
     rows = db.execute(text(query), ctx["params"]).mappings().all()
 
