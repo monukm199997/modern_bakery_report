@@ -46,6 +46,7 @@ def sales_comparison_export(
         {BASE_SQL}
         LEFT JOIN items i ON i.id = id.item_id
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         WHERE {where_sql}
     """
 

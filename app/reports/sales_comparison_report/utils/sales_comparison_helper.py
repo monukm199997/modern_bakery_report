@@ -70,10 +70,12 @@ def build_query_parts(
 
     if payload.customer_groups_ids:
         where_fragments.append("ac.cust_group = ANY(:customer_groups_ids)")
-
-    if payload.super_wiser_ids:
-        where_fragments.append("s.superwiser_id = ANY(:super_wiser_ids)")\
+        params["customer_groups_ids"] = payload.customer_groups_ids
         
+    if payload.super_wiser_ids:
+        where_fragments.append("s.superwiser_id = ANY(:super_wiser_ids)")
+        params["super_wiser_ids"] = payload.super_wiser_ids
+
     return where_fragments, params
 
 

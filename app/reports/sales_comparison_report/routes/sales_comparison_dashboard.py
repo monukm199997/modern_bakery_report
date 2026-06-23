@@ -46,6 +46,7 @@ def kpis(
             COALESCE({prev_expr},    0) AS previous_sales
         {BASE_SQL}
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         WHERE {where_sql}
     """
     kpi_row = db.execute(text(kpi_sql), params).first()
@@ -91,6 +92,7 @@ def top_items(payload: SalesComparisonRequest, db:Session = Depends(get_db)):
         {BASE_SQL}
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
         LEFT JOIN items i ON i.id = id.item_id
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         WHERE {where_sql}
         GROUP BY i.name
         ORDER BY current_sales DESC NULLS LAST
@@ -142,6 +144,7 @@ def top_categories(payload:SalesComparisonRequest, db:Session = Depends(get_db))
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
         LEFT JOIN items i ON i.id = id.item_id
         LEFT JOIN item_categories ic ON ic.id = i.category_id
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         WHERE {where_sql}
         GROUP BY ic.category_name
         ORDER BY current_sales DESC NULLS LAST
@@ -193,6 +196,7 @@ def top_salesman(payload: SalesComparisonRequest, db:Session = Depends(get_db)):
             COALESCE({prev_expr},    0) AS previous_sales
         {BASE_SQL}
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         WHERE {where_sql}
         GROUP BY s.osa_code, s.name
         ORDER BY current_sales DESC NULLS LAST
@@ -243,6 +247,7 @@ def top_routes(payload:SalesComparisonRequest, db:Session = Depends(get_db)):
             COALESCE({prev_expr},    0) AS previous_sales
         {BASE_SQL}
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
+        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         WHERE {where_sql}
         GROUP BY rt.route_name
         ORDER BY current_sales DESC NULLS LAST
@@ -304,6 +309,7 @@ def trend_line(payload:SalesComparisonRequest, db:Session = Depends(get_db)):
             COALESCE({prev_expr},    0) AS previous_sales
        {BASE_SQL}
        LEFT JOIN tbl_route rt ON rt.id = ih.route_id
+       LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
         WHERE {where_sql}
         GROUP BY bucket_key
         ORDER BY bucket_key
