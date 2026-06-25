@@ -12,8 +12,8 @@ def build_query_parts(payload: SalesReportRequest):
     params["from_date"] = payload.from_date
     params["to_date"] = payload.to_date
 
-    if payload.display_quantity and payload.display_quantity.lower() == "without_free_good":
-        where_fragments.append("id.item_total <> 0")
+    # if payload.display_quantity and payload.display_quantity.lower() == "without_free_good":
+    #     where_fragments.append("id.item_total <> 0")
     
    
     if payload.company_ids:
@@ -47,7 +47,6 @@ def build_query_parts(payload: SalesReportRequest):
         where_fragments.append("id.item_id = ANY(:item_ids)")
         params["item_ids"] = payload.item_ids
 
-    
     if payload.customer_channel_ids:
         where_fragments.append("ac.outlet_channel_id = ANY(:customer_channel_ids)")
         params["customer_channel_ids"] = payload.customer_channel_ids
@@ -55,6 +54,14 @@ def build_query_parts(payload: SalesReportRequest):
     if payload.customer_ids:
         where_fragments.append("ih.customer_id = ANY(:customer_ids)")
         params["customer_ids"] = payload.customer_ids
+
+    if payload.customer_groups_ids:
+        where_fragments.append("ac.cust_group = ANY(:customer_groups_ids)")
+        params["customer_groups_ids"] = payload.customer_groups_ids
+        
+    if payload.super_wiser_ids:
+        where_fragments.append("s.superwiser_id = ANY(:super_wiser_ids)")
+        params["super_wiser_ids"] = payload.super_wiser_ids
 
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params

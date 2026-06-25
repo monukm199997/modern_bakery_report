@@ -12,6 +12,7 @@ from app.reports.target_commison_report.schemas.schemas import (
 )
 from app.reports.target_commison_report.utils.target_commison_helper import (
     prepare_all_contexts,
+    resolve_group_by,
 )
 from app.reports.target_commison_report.routes.target_commison_export import (
     fetch_sales_data,
@@ -127,12 +128,10 @@ def sales_achievement_table(
     return_data = fetch_returns_data(db, ctxs["returns"], payload.to_date)
     target_data = fetch_target_data(db, ctxs["target"])
 
-    # Auto-switch grouping: channel_ids present -> tabs/totals by channel.
-    use_channel = bool(payload.channel_ids)
-    group_by = "channel" if use_channel else "region"
-    total_row_type = (
-        "channel_total" if use_channel else "region_total"
-    )
+    # Grouping is decided by the most specific filter applied:
+    # Route > Region > Company. If none are applied, default to Company.
+    group_by = resolve_group_by(payload)
+    total_row_type = f"{group_by}_total"
 
     grouped_data = compute_grouped_rows(
         sales_data, return_data, target_data,
@@ -218,7 +217,7 @@ def sales_achievement_table(
             "total_days_in_month": total_days,
             "current_day": current_day,
             "row_count": len(rows),
-            "group_by": group_by,  # "region" or "channel" — frontend can use this to style
+            "group_by": group_by,  # "company", "region", or "route" — tells the frontend what the "region" field on each row actually represents
         },
         "rows": rows,
     }

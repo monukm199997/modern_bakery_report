@@ -19,6 +19,7 @@ from app.dependencies.auth import get_current_user
 from app.reports.target_commison_report.schemas.schemas import SalesAchievementSchema
 from app.reports.target_commison_report.utils.target_commison_helper import (
     prepare_all_contexts,
+    resolve_group_by,
 )
 
 
@@ -27,12 +28,12 @@ router = APIRouter(tags=["Target Commission Report"], dependencies=[Depends(get_
 def fetch_sales_data(db: Session, ctx: dict, to_date: str):
     sql = f"""
         SELECT
-            rg.region_name        AS region,
-            COALESCE(oc.outlet_channel, '(No Channel)') AS channel,
-            rt.route_code         AS route_code,
-            s.id                  AS salesman_id,
-            s.name                AS salesman_name,
-            s.osa_code            AS osa_code,
+            co.company_name        AS company,
+            rg.region_name          AS region,
+            rt.route_code           AS route_code,
+            s.id                    AS salesman_id,
+            s.name                  AS salesman_name,
+            s.osa_code              AS osa_code,
             COALESCE(ROUND(
                 SUM(CASE
                     WHEN DATE(ih.invoice_date) = :daily_date
@@ -44,14 +45,14 @@ def fetch_sales_data(db: Session, ctx: dict, to_date: str):
         FROM invoice_headers ih
         LEFT JOIN invoice_details id ON id.header_id = ih.id
         LEFT JOIN salesman       s  ON s.id = ih.salesman_id
-        LEFT JOIN outlet_channel oc ON oc.id = s.channel_id
+        LEFT JOIN tbl_company    co ON co.id = s.company_id
         LEFT JOIN item_uoms      iu ON iu.item_id = id.item_id
                                    AND iu.uom_id  = id.uom
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
-        GROUP BY rg.region_name, oc.outlet_channel, rt.route_code,
+        GROUP BY co.company_name, rg.region_name, rt.route_code,
                  s.id, s.name, s.osa_code
-        ORDER BY rg.region_name, s.name
+        ORDER BY co.company_name, rg.region_name, s.name
     """
     params = {**ctx["params"], "daily_date": to_date}
     return db.execute(text(sql), params).mappings().all()
@@ -60,12 +61,12 @@ def fetch_sales_data(db: Session, ctx: dict, to_date: str):
 def fetch_returns_data(db: Session, ctx: dict, to_date: str):
     sql = f"""
         SELECT
-            rg.region_name AS region,
-            COALESCE(oc.outlet_channel, '(No Channel)') AS channel,
-            s.id           AS salesman_id,
-            s.name         AS salesman_name,
-            s.osa_code     AS osa_code,
-            rt.route_code  AS route_code,
+            co.company_name AS company,
+            rg.region_name   AS region,
+            s.id             AS salesman_id,
+            s.name           AS salesman_name,
+            s.osa_code       AS osa_code,
+            rt.route_code    AS route_code,
             COALESCE(ROUND(
                 SUM(CASE
                     WHEN DATE(rh.created_at) = :daily_date
@@ -77,12 +78,12 @@ def fetch_returns_data(db: Session, ctx: dict, to_date: str):
         FROM return_header rh
         LEFT JOIN return_details rd ON rd.header_id = rh.id
         LEFT JOIN salesman       s  ON s.id = rh.salesman_id
-        LEFT JOIN outlet_channel oc ON oc.id = s.channel_id
+        LEFT JOIN tbl_company    co ON co.id = s.company_id
         LEFT JOIN item_uoms      iu ON iu.item_id = rd.item_id
                                    AND iu.uom_id  = rd.uom_id
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
-        GROUP BY rg.region_name, oc.outlet_channel, s.id, s.name, s.osa_code,
+        GROUP BY co.company_name, rg.region_name, s.id, s.name, s.osa_code,
                  rt.route_code
     """
     params = {**ctx["params"], "daily_date": to_date}
@@ -92,18 +93,18 @@ def fetch_returns_data(db: Session, ctx: dict, to_date: str):
 def fetch_target_data(db: Session, ctx: dict):
     sql = f"""
         SELECT
-            rg.region_name AS region,
-            COALESCE(oc.outlet_channel, '(No Channel)') AS channel,
-            s.id           AS salesman_id,
-            s.name         AS salesman_name,
-            s.osa_code     AS osa_code,
-            rt.route_code  AS route_code,
+            co.company_name AS company,
+            rg.region_name   AS region,
+            s.id             AS salesman_id,
+            s.name           AS salesman_name,
+            s.osa_code       AS osa_code,
+            rt.route_code    AS route_code,
             COALESCE(SUM(tc.total_target_amount), 0) AS target
         FROM target_commison tc
         {ctx['join_sql']}
-        LEFT JOIN outlet_channel oc ON oc.id = s.channel_id
+        LEFT JOIN tbl_company co ON co.id = s.company_id
         WHERE {ctx['where_sql']}
-        GROUP BY rg.region_name, oc.outlet_channel, s.id, s.name, s.osa_code,
+        GROUP BY co.company_name, rg.region_name, s.id, s.name, s.osa_code,
                  rt.route_code
     """
     return db.execute(text(sql), ctx["params"]).mappings().all()
@@ -292,7 +293,7 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
     summary_ws.cell(1, 1).alignment = CENTER
 
     # Group headers (row 2)
-    summary_ws.cell(2, 1, "")  # Region label sits empty above
+    summary_ws.cell(2, 1, "")  # Group label (Company/Region/Route) sits empty above
     _style_header(summary_ws.cell(2, 1))
     # DAILY group: cols 2-4
     summary_ws.merge_cells(start_row=2, start_column=2, end_row=2, end_column=4)
@@ -307,7 +308,7 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
     summary_ws.cell(2, 8, "ESTIMATED MONTHLY SALES")
     _style_header(summary_ws.cell(2, 8))
 
-    # Sub-headers (row 3) — first column label is dynamic ("Region" or "Channel")
+    # Sub-headers (row 3) — first column label is dynamic ("Company", "Region", or "Route")
     for col, header in enumerate(SUMMARY_SUB_HEADERS, 1):
         label = group_label if col == 1 else header
         _style_header(summary_ws.cell(3, col, label))
@@ -320,7 +321,8 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
     }
 
     # ------------------------------------------------------------
-    # REGION SHEETS
+    # GROUP SHEETS (one tab per Company, Region, or Route — depending
+    # on which filter/grouping is active)
     # ------------------------------------------------------------
     for group_name, rows in grouped_data.items():
         ws = wb.create_sheet((group_name or "Unknown")[:30])
@@ -531,10 +533,9 @@ def sales_achievement_export(
     return_data = fetch_returns_data(db, ctxs["returns"], payload.to_date)
     target_data = fetch_target_data(db, ctxs["target"])
 
-    use_channel = bool(payload.channel_ids)
-    group_by = "channel" if use_channel else "region"
-    group_label = "Channel" if use_channel else "Region"
-    file_prefix = "sales_achievement_by_channel_" if use_channel else "sales_achievement_"
+    group_by = resolve_group_by(payload)
+    group_label = {"company": "Company", "region": "Region", "route_code": "Route"}[group_by]
+    file_prefix = f"sales_achievement_by_{group_by}_"
 
     grouped_data = compute_grouped_rows(
         sales_data, return_data, target_data,

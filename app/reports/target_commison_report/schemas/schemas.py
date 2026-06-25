@@ -33,7 +33,7 @@ class SalesAchievementSchema(BaseModel):
     as_of_date: str
     company_ids: Optional[List[int]] = None
     region_ids: Optional[List[int]] = None
-    channel_ids: Optional[List[int]] = None
+    route_ids: Optional[List[int]] = None
 
     # ---- derived values; the routes/helper read these unchanged ----
 

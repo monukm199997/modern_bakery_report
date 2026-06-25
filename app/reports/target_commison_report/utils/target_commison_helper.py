@@ -64,9 +64,9 @@ def _build_txn_query_parts(
         where_fragments.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
 
-    if payload.channel_ids:
-        where_fragments.append("s.channel_id = ANY(:channel_ids)")
-        params["channel_ids"] = payload.channel_ids
+    if payload.route_ids:
+        where_fragments.append("rt.id = ANY(:route_ids)")
+        params["route_ids"] = payload.route_ids
 
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params
@@ -132,9 +132,9 @@ def prepare_target_context(payload: SalesAchievementSchema):
         where_fragments.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
 
-    if payload.channel_ids:
-        where_fragments.append("s.channel_id = ANY(:channel_ids)")
-        params["channel_ids"] = payload.channel_ids
+    if payload.route_ids:
+        where_fragments.append("rt.id = ANY(:route_ids)")
+        params["route_ids"] = payload.route_ids
 
     joins = list(dict.fromkeys(joins))
     return {
@@ -154,3 +154,20 @@ def prepare_all_contexts(payload: SalesAchievementSchema):
         "returns": prepare_returns_context(payload),
         "target": prepare_target_context(payload),
     }
+
+
+# ---------- grouping resolution (Company -> Region -> Route) ----------
+
+def resolve_group_by(payload: SalesAchievementSchema) -> str:
+    """
+    Decide what the report rows / export tabs should be grouped by,
+    based on which filters are applied.
+
+    Priority (most specific wins): Route > Region > Company.
+    If none of the three filters are applied, default to Company.
+    """
+    if payload.route_ids:
+        return "route_code"
+    if payload.region_ids:
+        return "region"
+    return "company"
