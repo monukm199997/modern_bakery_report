@@ -32,6 +32,9 @@ from app.reports.item_dashboard.routes.item_dash import router as item_dashboard
 from app.reports.visit_report.routes.visit_tableview import router as visit_tableview
 from app.reports.visit_report.routes.visit_export import router as visit_export
 
+from app.reports.team_master_report.routes.team_master_tableview import router as team_master_tableview
+from app.reports.team_master_report.routes.team_master_export import router as team_master_export
+
 
 app = FastAPI(title="Modern Bakery Reports API")
 
@@ -67,6 +70,8 @@ app.include_router(item_dashboard, prefix="/api/item-dashboard")
 app.include_router(visit_tableview, prefix="/api/visit_report")
 app.include_router(visit_export, prefix="/api/visit_report")
 
+app.include_router(team_master_tableview, prefix="/api/team-master-report")
+app.include_router(team_master_export, prefix="/api/team-master-report")
 
 
 

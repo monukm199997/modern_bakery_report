@@ -24,7 +24,7 @@ def load_static_filters():
         companies = conn.execute(
             text(
                 """
-            SELECT id, company_name
+            SELECT id, company_code, company_name
             FROM tbl_company
             ORDER BY company_name
         """
@@ -34,7 +34,7 @@ def load_static_filters():
         channels = conn.execute(
             text(
                 """
-            SELECT id, outlet_channel
+            SELECT id, outlet_channel_code, outlet_channel
             FROM outlet_channel
             ORDER BY outlet_channel
         """
@@ -44,7 +44,7 @@ def load_static_filters():
         categories = conn.execute(
             text(
                 """
-            SELECT id, category_name
+            SELECT id, category_code, category_name
             FROM item_categories
             ORDER BY category_name
         """
@@ -103,7 +103,7 @@ def get_regions(
     add_filter(where, params, "id", perms["region"], "region_ids")
 
     query = """
-        SELECT id, region_name
+        SELECT id, region_code, region_name
         FROM tbl_region
     """
 
@@ -138,7 +138,7 @@ def get_routes(
     add_filter(where, params, "id", perms["route"], "route_ids")
 
     query = """
-        SELECT id, route_name
+        SELECT id, route_code, route_name
         FROM tbl_route
     """
 
@@ -198,7 +198,7 @@ def get_salesmen(
     add_filter(where, params, "id", perms["salesman"], "salesman_ids")
 
     query = """
-        SELECT id, name
+        SELECT id, osa_code, name
         FROM salesman
     """
 
@@ -234,7 +234,7 @@ def get_items(
     add_filter(where, params, "id", perms["item"], "item_ids")
 
     query = """
-        SELECT id, name
+        SELECT id, code, name
         FROM items
     """
 
@@ -268,7 +268,7 @@ def get_customer(
     add_filter(where, params, "id", perms["customer"], "customer_ids")
 
     query = """
-        SELECT id, name
+        SELECT id, osa_code, name
         FROM agent_customers
     """
     if where:
