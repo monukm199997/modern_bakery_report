@@ -46,7 +46,10 @@ def customer_master_export(
             ac.osa_code AS customer_code,
             ac.name AS customer_name,
             ac.dateof_creation,
-            ac.status,
+            CASE
+                WHEN ac.status = 1 THEN 'Active'
+                WHEN ac.status = 0 THEN 'Inactive'
+            END AS status,
             rt.route_code,
             rt.route_name,
             s.osa_code AS salesman_code,
@@ -54,6 +57,7 @@ def customer_master_export(
             oc.outlet_channel,
             ac.trade_license_no AS tl_number,
             ac.tin_no,
+            ac.customer_type,
             ac.cust_group,
             ac.payment_type AS payment_terms,
             ac.street || ' - ' || ac.city AS address,
@@ -91,6 +95,7 @@ def customer_master_export(
         "Outlet Channel",
         "TL Number",
         "TIN No",
+        "Customer Type",
         "Customer Group",
         "Payment Terms",
         "Address",
@@ -122,6 +127,7 @@ def customer_master_export(
             row.outlet_channel,
             row.tl_number,
             row.tin_no,
+            row.customer_type,
             row.cust_group,
             row.payment_terms,
             row.address,
