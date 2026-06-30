@@ -35,6 +35,15 @@ from app.reports.visit_report.routes.visit_export import router as visit_export
 from app.reports.team_master_report.routes.team_master_tableview import router as team_master_tableview
 from app.reports.team_master_report.routes.team_master_export import router as team_master_export
 
+from app.reports.customer_master_report.routes.customer_master_tableview import router as customer_master_tableview
+from app.reports.customer_master_report.routes.customer_master_export import router as customer_master_export
+
+from app.reports.sales_new_report.routes.sales_tableview import router as sales_new_tableview
+from app.reports.sales_new_report.routes.sales_export import router as sales_new_export
+
+from app.reports.vehicles_permit_report.routes.vehicles_permit_tableview import router as vehicles_permit_tableview
+from app.reports.vehicles_permit_report.routes.vehicles_permit_export import router as vehicles_permit_export
+
 
 app = FastAPI(title="Modern Bakery Reports API")
 
@@ -73,6 +82,14 @@ app.include_router(visit_export, prefix="/api/visit_report")
 app.include_router(team_master_tableview, prefix="/api/team-master-report")
 app.include_router(team_master_export, prefix="/api/team-master-report")
 
+app.include_router(customer_master_tableview, prefix="/api/customer_master_report")
+app.include_router(customer_master_export, prefix="/api/customer_master_report")
+
+app.include_router(sales_new_tableview, prefix="/api/sales-new-report")
+app.include_router(sales_new_export, prefix="/api/sales-new-report")
+
+app.include_router(vehicles_permit_tableview, prefix="/api/vehicles_permit_report")
+app.include_router(vehicles_permit_export, prefix="/api/vehicles_permit_report")
 
 
 app.add_middleware(

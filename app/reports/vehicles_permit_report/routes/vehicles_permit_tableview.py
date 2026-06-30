@@ -1,26 +1,22 @@
-from fastapi import APIRouter, Depends, Query,Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.reports.team_master_report.schemas.team_master_schema import TeamMasterRequest
-from app.reports.team_master_report.utils.team_master_helper import prepare_dashboard_context
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.reports.vehicles_permit_report.schemas.vehicles_schema import VehiclesPermitRequest
+from app.reports.vehicles_permit_report.utils.vehicles_helper import prepare_dashboard_context
 from app.utils.constant import ROWS_PER_PAGE
-router = APIRouter(tags=["Team Master Report"], dependencies=[Depends(get_current_user)])
 
-@router.post("/team-master-tableview")
-def get_team_master_tableview(
-    payload: TeamMasterRequest,
-    request: Request, 
-    page: int = Query(1, ge=1),
-    db: Session = Depends(get_db)
-):
+router = APIRouter(tags=["Vehicles Permit Report"], dependencies=[Depends(get_current_user)])
+
+@router.post("/vehicles-permit-report")
+def vehicles_permits_report(payload: VehiclesPermitRequest, request: Request, page: int = Query(1, ge=1), db:Session = Depends(get_db)):
     ctx = prepare_dashboard_context(payload)
 
     base_sql = f"""
-        FROM salesman s
-        LEFT JOIN tbl_route rt ON s.route_id = rt.id
-        LEFT JOIN tbl_region r ON rt.region_id = r.id
+            FROM vehicle_permit vp
+        LEFT JOIN tbl_vehicle v ON v.id = vp.vehicle_id
+        LEFT JOIN tbl_region r ON r.id = vp.region_id
         WHERE {ctx['where_sql']}
     """
     count_sql = f"""
@@ -31,17 +27,17 @@ def get_team_master_tableview(
     offset = (page - 1) * ROWS_PER_PAGE
     ctx['params']["limit"] = ROWS_PER_PAGE
     ctx['params']["offset"] = offset
-    
+
     query = f"""
         SELECT
-            rt.route_code,
-            rt.route_name,
-            s.osa_code AS salesman_code,
-            s.name AS salesman_name,
-            s.dateof_join,
-            r.region_name
+            v.number_plat AS vehicles_number_plate,
+            r.region_code || ' - ' || r.region_name AS region,
+            vp.permit_no AS permit_number,
+            vp.expiry_date AS permit_expiry_date,
+            vp.registration_card_no AS registration_card_number,
+            vp.registration_card_expiry_date
         {base_sql}
-        ORDER BY rt.route_code, s.osa_code
+        ORDER BY permit_expiry_date 
         LIMIT :limit OFFSET :offset
     """
     rows = db.execute(text(query), ctx['params']).fetchall()

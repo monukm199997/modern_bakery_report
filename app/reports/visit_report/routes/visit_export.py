@@ -54,6 +54,20 @@ def visit_export(
             s.name AS salesman_name,
             TO_CHAR(vp.visit_start_time, 'HH24:MI:SS') AS visit_start_time,
             TO_CHAR(vp.visit_end_time, 'HH24:MI:SS') AS visit_end_time,
+            COALESCE(
+                    (vp.visit_end_time - vp.visit_start_time)::text,
+                    '-'
+                ) AS time_spent,
+            COALESCE(
+                (
+                    vp.visit_start_time -
+                    LAG(vp.visit_end_time) OVER (
+                        PARTITION BY vp.salesman_id
+                        ORDER BY vp.visit_start_time
+                    )
+                )::text,
+                '-'
+            ) AS idle_time,
             ac.latitude AS customer_latitude,
             ac.longitude AS customer_longitude,
             vp.latitude,
@@ -65,7 +79,7 @@ def visit_export(
         LEFT JOIN tbl_route rt ON rt.id = vp.route_id
         LEFT JOIN salesman s ON s.id = vp.salesman_id
         WHERE {ctx['where_sql']}
-        ORDER BY date DESC
+        ORDER BY date 
     """
 
     rows = db.execute(text(query), ctx["params"]).fetchall()
@@ -83,8 +97,10 @@ def visit_export(
         "Route",
         "Sales Team Code",
         "Sales Team",
-        "Start Time",
-        "End Time",
+        "Time In",
+        "Time Out",
+        "Spend Time",
+        "Idle Time",
         "Customer Latitude",
         "Customer Longitude",
         "Visit Latitude",
@@ -113,6 +129,8 @@ def visit_export(
             row.salesman_name,
             row.visit_start_time,
             row.visit_end_time,
+            row.time_spent,
+            row.idle_time,
             row.customer_latitude,
             row.customer_longitude,
             row.latitude,

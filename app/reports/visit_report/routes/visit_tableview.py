@@ -41,6 +41,21 @@ def visit_tableview(payload: VisitPlanRequest, request: Request, page: int = Que
                 s.name AS salesman_name,
                 TO_CHAR(vp.visit_start_time, 'HH24:MI:SS') AS visit_start_time,
                 TO_CHAR(vp.visit_end_time, 'HH24:MI:SS') AS visit_end_time,
+                 COALESCE(
+                    (vp.visit_end_time - vp.visit_start_time)::text,
+                    '-'
+                ) AS time_spent,
+
+                COALESCE(
+                        (
+                            vp.visit_start_time -
+                            LAG(vp.visit_end_time) OVER (
+                                PARTITION BY vp.salesman_id
+                                ORDER BY vp.visit_start_time
+                            )
+                        )::text,
+                        '-'
+                    ) AS idle_time,
                 ac.latitude AS customer_latitude,
                 ac.longitude AS customer_longitude,
                 vp.latitude,
@@ -48,7 +63,7 @@ def visit_tableview(payload: VisitPlanRequest, request: Request, page: int = Que
                 vp.shop_status,
                 vp.remark AS reason
             {base_sql}
-            ORDER BY date DESC
+            ORDER BY date 
             LIMIT :limit OFFSET :offset
         """
     rows = db.execute(text(query), ctx['params']).fetchall()
