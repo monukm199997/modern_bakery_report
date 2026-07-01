@@ -19,11 +19,11 @@ def get_sales_report_table(payload: SalesReportRequest, db: Session = Depends(ge
         FROM sales_documents_header sdh
         JOIN sales_documents_detail sdd ON sdd.header_id = sdh.id
         LEFT JOIN salesman sm ON sm.id = sdh.salesman_id
-        LEFT JOIN item_uoms iu
-                ON iu.item_id = sdd.item_id
-                AND iu.uom_id = sdd.uom
         LEFT JOIN users sup ON sup.id = sm.superwiser_id AND sup.role = 108
         LEFT JOIN items i ON i.id = sdd.item_id
+        LEFT JOIN item_uoms iu
+            ON iu.item_id = i.id
+            AND iu.status = '1'
         LEFT JOIN agent_customers ac ON ac.id = sdh.customer_id
         LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
         LEFT JOIN tbl_route rt ON rt.id = sdh.route_id

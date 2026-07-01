@@ -14,16 +14,20 @@ DRILL_DOWN_MAP = {
     "item": {
         "select": """
         i.code AS item_code,
-        i.name AS item
+        i.name AS item,
+        i.barcode,
+        iu.name AS uom_name,
+        iu.upc AS upc
         """,
-        "group_by": "i.code, i.name",
+        "group_by": "i.code, i.name, i.barcode, iu.name, iu.upc",
     },
     "salesman": {
         "select": """
         sm.osa_code AS salesman_code,
-        sm.name AS salesman
+        sm.name AS salesman,
+        sup.name AS superwiser
         """,
-        "group_by": "sm.osa_code, sm.name",
+        "group_by": "sm.osa_code, sm.name, sup.name",
     },
     "route": {
         "select": """
