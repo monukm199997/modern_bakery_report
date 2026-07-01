@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.sales_new_report.schemas.sales_schema import SalesReportRequest
-from app.reports.sales_new_report.utils.sales_helper import prepare_sales_report_context,sales_quantity
-router = APIRouter(tags=["Sales New Report"])#, dependencies=[Depends(get_current_user)])
+from app.reports.sales_new_report.utils.sales_helper import prepare_sales_report_context
+router = APIRouter(tags=["Sales New Report"], dependencies=[Depends(get_current_user)])
 
-quantity = sales_quantity()
+
 
 @router.post("/sales-new-tableview")
 def get_sales_report_table(payload: SalesReportRequest, db: Session = Depends(get_db)):

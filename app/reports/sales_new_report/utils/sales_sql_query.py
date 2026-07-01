@@ -49,15 +49,18 @@ DRILL_DOWN_MAP = {
     },
 }
 
-SALES_QUANTITY = """
-        sdd.quantity::numeric * iu.upc::numeric
+SALES_VOLUME = """
+    sdd.quantity
     """
+SALES_REVENUE = """
+    sdd.net_total
+"""
 
-REVENUE_GROSS_SALES = """COALESCE(
+REVENUE_GROSS_SALES = f"""COALESCE(
                 SUM(
                     CASE
                         WHEN sdh.document_type = ANY(:sales_document_types)
-                        THEN sdd.net_total
+                        THEN {SALES_REVENUE}
                         ELSE 0
                     END
                 ),
@@ -65,11 +68,11 @@ REVENUE_GROSS_SALES = """COALESCE(
             ) AS revenue_gross_sales
         """
 
-REVENUE_GROSS_RETURN = """COALESCE(
+REVENUE_GROSS_RETURN = f"""COALESCE(
                 SUM(
                     CASE
                         WHEN sdh.document_type = ANY(:return_document_types)
-                        THEN sdd.net_total
+                        THEN {SALES_REVENUE}
                         ELSE 0
                     END
                 ),
@@ -78,12 +81,12 @@ REVENUE_GROSS_RETURN = """COALESCE(
             """
 
 
-REVENUE_ZERO = """
+REVENUE_ZERO = f"""
             COALESCE(
                     SUM(
                         CASE
                             WHEN sdh.document_type = ANY(:sales_document_types)
-                            THEN sdd.net_total
+                            THEN {SALES_REVENUE}
                             ELSE 0
                         END
                     ),
@@ -91,12 +94,12 @@ REVENUE_ZERO = """
                 ) = 0 THEN 0
             """
 
-TOTAL_RETURN_REVENUE = """
+TOTAL_RETURN_REVENUE = f"""
             COALESCE(
                     SUM(
                         CASE
                             WHEN sdh.document_type = ANY(:return_document_types)
-                            THEN sdd.net_total
+                            THEN {SALES_REVENUE}
                             ELSE 0
                         END
                     ),
@@ -104,12 +107,12 @@ TOTAL_RETURN_REVENUE = """
                 )
             """
 
-TOTAL_SALES_REVENUE = """
+TOTAL_SALES_REVENUE = f"""
                  COALESCE(
                         SUM(
                             CASE
                                 WHEN sdh.document_type = ANY(:sales_document_types)
-                                THEN sdd.net_total
+                                THEN {SALES_REVENUE}
                                 ELSE 0
                             END
                         ),
@@ -150,7 +153,7 @@ VOLUME_GROSS_SALES = f"""
                 SUM(
                     CASE
                         WHEN sdh.document_type = ANY(:sales_document_types)
-                        THEN {SALES_QUANTITY}
+                        THEN {SALES_VOLUME}
                         ELSE 0
                     END
                 ),
@@ -163,7 +166,7 @@ VOLUME_GROSS_RETURN = f"""
             SUM(
                 CASE
                     WHEN sdh.document_type = ANY(:return_document_types)
-                    THEN {SALES_QUANTITY}
+                    THEN {SALES_VOLUME}
                     ELSE 0
                 END
             ),
@@ -176,7 +179,7 @@ VOLUME_ZERO = f"""
             SUM(
                 CASE
                     WHEN sdh.document_type = ANY(:sales_document_types)
-                    THEN {SALES_QUANTITY}
+                    THEN {SALES_VOLUME}
                     ELSE 0
                 END
             ),
@@ -189,7 +192,7 @@ TOTAL_RETURN_VOLUME = f"""
                 SUM(
                     CASE
                         WHEN sdh.document_type = ANY(:return_document_types)
-                        THEN {SALES_QUANTITY}
+                        THEN {SALES_VOLUME}
                         ELSE 0
                     END
                 ),
@@ -202,7 +205,7 @@ TOTAL_SALES_VOLUME = f"""
                 SUM(
                     CASE
                         WHEN sdh.document_type = ANY(:sales_document_types)
-                        THEN {SALES_QUANTITY}
+                        THEN {SALES_VOLUME}
                         ELSE 0
                     END
                 ),

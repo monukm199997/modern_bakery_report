@@ -13,7 +13,6 @@ from app.reports.sales_new_report.utils.sales_sql_query import (
     VOLUME_GROSS_RETURN,
     VOLUME_RETURN_PERCENT,
     VOLUME_NET_SALES,
-    SALES_QUANTITY,
 )
 
 
@@ -130,6 +129,5 @@ def prepare_sales_report_context(payload: SalesReportRequest):
     }
 
 
-def sales_quantity():
-    return SALES_QUANTITY
+
 
