@@ -21,6 +21,7 @@ def get_team_master_tableview(
         FROM salesman s
         LEFT JOIN tbl_route rt ON s.route_id = rt.id
         LEFT JOIN tbl_vehicle v ON v.id = rt.vehicle_id
+        LEFT JOIN users sup ON sup.id = s.superwiser_id AND sup.role = 108
         LEFT JOIN tbl_region r ON rt.region_id = r.id
         WHERE {ctx['where_sql']}
     """
@@ -41,6 +42,7 @@ def get_team_master_tableview(
             rt.route_name,
             s.osa_code AS salesman_code,
             s.name AS salesman_name,
+            sup.name AS superwiser,
             s.dateof_join,
             r.region_name
         {base_sql}

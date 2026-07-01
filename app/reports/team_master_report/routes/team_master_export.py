@@ -51,11 +51,13 @@ def export_team_master(
             rt.route_name,
             s.osa_code AS salesman_code,
             s.name AS salesman_name,
+            sup.name AS superwiser,
             s.dateof_join,
             r.region_name
         FROM salesman s
         LEFT JOIN tbl_route rt ON s.route_id = rt.id
         LEFT JOIN tbl_vehicle v ON v.id = rt.vehicle_id
+        LEFT JOIN users sup ON sup.id = s.superwiser_id AND sup.role = 108
         LEFT JOIN tbl_region r ON rt.region_id = r.id
         WHERE {ctx['where_sql']}
         ORDER BY rt.route_code, s.osa_code
@@ -71,9 +73,10 @@ def export_team_master(
         "Vehicle Code",
         "Vehicle No. Plate",
         "Route Code",
-        "Route Name",
+        "Route ",
         "Salesman Code",
-        "Salesman Name",
+        "Sales Team",
+        "Superwiser",
         "Date of Join",
         "Region"
     ]
@@ -96,6 +99,7 @@ def export_team_master(
             row.route_name,
             row.salesman_code,
             row.salesman_name,
+            row.superwiser,
             row.dateof_join.strftime("%d-%m-%Y") if row.dateof_join else "",
             row.region_name
         ])

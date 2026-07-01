@@ -15,8 +15,8 @@ from app.reports.vehicles_report.utils.vehicles_helper import prepare_dashboard_
 
 router = APIRouter(tags=["vehicles_report"], dependencies=[Depends(get_current_user)])
 
-DB_COLUMNS = ["trip_date", "trip_code", "vehicle_code", "vehicle_no_plat", "vehicle_chesis_no",  "vehicle_type", "region_code", "region", "route_code", "route", "salesman", "salesman_code","start_odometer", "end_odometer", "distance_traveled"]
-HEADERS = ["Trip Date", "Trip Code", "Vehicle Code", "Vehicle Number Plat", "Vehicle Chesis Number", "Vehicle Type", "Region Code", "Region", "Route Code", "Route", "Sales Team", "Sales Team Code", "Start Odometer", "End Odometer", "Total Distance"]
+DB_COLUMNS = ["trip_date", "trip_code", "vehicle_code", "vehicle_no_plat", "vehicle_chesis_no",  "vehicle_type", "region_code", "region", "route_code", "route", "salesman_code", "salesman", "superwiser", "start_odometer", "end_odometer", "distance_traveled"]
+HEADERS = ["Trip Date", "Trip Code", "Vehicle Code", "Vehicle Number Plat", "Vehicle Chesis Number", "Vehicle Type", "Region Code", "Region", "Route Code", "Route", "Sales Team Code", "Sales Team", "Superwiser", "Start Odometer", "End Odometer", "Total Distance"]
 HEADER_FILL = PatternFill(start_color="FF993442", end_color="FF993442", fill_type="solid")
 HEADER_FONT = Font(color="FFFFFFFF", bold=True)
 
@@ -31,6 +31,7 @@ def vehicle_export(payload: VehiclesRequest, db: Session = Depends(get_db)):
             rt.route_name AS route,
             s.name AS salesman,
             s.osa_code AS salesman_code,
+            sup.name AS superwiser,
             tt.trip_date, 
             tt.trip_code, 
             tv.number_plat AS vehicle_no_plat,
@@ -44,6 +45,7 @@ def vehicle_export(payload: VehiclesRequest, db: Session = Depends(get_db)):
         LEFT JOIN tbl_vehicle tv ON tv.id = tt.vehicle_id
         LEFT JOIN tbl_route rt ON rt.vehicle_id = tt.vehicle_id
         LEFT JOIN salesman s ON s.route_id = rt.id
+        LEFT JOIN users sup ON sup.id = s.superwiser_id AND sup.role = 108
         LEFT JOIN tbl_region r ON r.id = rt.region_id
         WHERE {ctx['where_sql']}
         ORDER BY trip_date DESC

@@ -19,6 +19,7 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
             LEFT JOIN tbl_vehicle tv ON tv.id = tt.vehicle_id
             LEFT JOIN tbl_route rt ON rt.vehicle_id = tt.vehicle_id
             LEFT JOIN salesman s ON s.route_id = rt.id
+            LEFT JOIN users sup ON sup.id = s.superwiser_id AND sup.role = 108
             LEFT JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
         """
@@ -37,8 +38,9 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
             r.region_name,
             rt.route_code,
             rt.route_name,
-            s.name,
-            s.osa_code,
+            s.name AS salesman_name,
+            s.osa_code AS salesman_code,
+            sup.name AS superwiser,
             tt.trip_date,
             tt.trip_code,
             tv.number_plat AS vehicle_no_plat,
