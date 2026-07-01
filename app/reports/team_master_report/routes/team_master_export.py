@@ -45,6 +45,8 @@ def export_team_master(
 
     query = f"""
         SELECT
+            v.vehicle_code,
+            v.number_plat,
             rt.route_code,
             rt.route_name,
             s.osa_code AS salesman_code,
@@ -52,10 +54,9 @@ def export_team_master(
             s.dateof_join,
             r.region_name
         FROM salesman s
-        LEFT JOIN tbl_route rt
-            ON s.route_id = rt.id
-        LEFT JOIN tbl_region r
-            ON rt.region_id = r.id
+        LEFT JOIN tbl_route rt ON s.route_id = rt.id
+        LEFT JOIN tbl_vehicle v ON v.id = rt.vehicle_id
+        LEFT JOIN tbl_region r ON rt.region_id = r.id
         WHERE {ctx['where_sql']}
         ORDER BY rt.route_code, s.osa_code
     """
@@ -67,6 +68,8 @@ def export_team_master(
     ws.title = "Team Master"
 
     headers = [
+        "Vehicle Code",
+        "Vehicle No. Plate",
         "Route Code",
         "Route Name",
         "Salesman Code",
@@ -87,6 +90,8 @@ def export_team_master(
     # Data
     for row in rows:
         ws.append([
+            row.vehicle_code,
+            row.number_plat,
             row.route_code,
             row.route_name,
             row.salesman_code,

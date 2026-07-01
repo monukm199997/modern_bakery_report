@@ -35,6 +35,7 @@ def _fetch_doc_data(db: Session, ctx: dict, to_date: str):
             s.id            AS salesman_id,
             s.name          AS salesman_name,
             s.osa_code      AS osa_code,
+            sup.name        AS supervisor_name,
             COALESCE(ROUND(
                 SUM(CASE
                     WHEN sdh.invoice_date = CAST(:daily_date AS date)
@@ -53,7 +54,7 @@ def _fetch_doc_data(db: Session, ctx: dict, to_date: str):
         LEFT JOIN users       sup ON sup.id = s.superwiser_id AND sup.role = 108
         WHERE {ctx['where_sql']}
         GROUP BY co.company_name, rg.region_name, rt.route_code,
-                 s.id, s.name, s.osa_code
+                 s.id, s.name, s.osa_code, sup.name
         ORDER BY co.company_name, rg.region_name, s.name
     """
     params = {**ctx["params"], "daily_date": to_date}
@@ -77,13 +78,14 @@ def fetch_target_data(db: Session, ctx: dict):
             s.name          AS salesman_name,
             s.osa_code      AS osa_code,
             rt.route_code   AS route_code,
+            sup.name        AS supervisor_name,
             COALESCE(SUM({ctx['target_expr']}), 0) AS target
         FROM target_commison tc
         {ctx['join_sql']}
         LEFT JOIN tbl_company co ON co.id = s.company_id
         WHERE {ctx['where_sql']}
         GROUP BY co.company_name, rg.region_name, s.id, s.name, s.osa_code,
-                 rt.route_code
+                 rt.route_code, sup.name
     """
     return db.execute(text(sql), ctx["params"]).mappings().all()
 
@@ -153,6 +155,7 @@ def compute_grouped_rows(sales_data, return_data, target_data,
             "route_code": pick(key, "route_code"),
             "osa_code": pick(key, "osa_code"),
             "salesman": pick(key, "salesman_name"),
+            "supervisor": pick(key, "supervisor_name"),
             "daily_sales": daily_sales,
             "daily_returns": daily_returns,
             "daily_ret_pct": daily_ret_pct,
@@ -235,6 +238,7 @@ def _salesman_row(region: str, item: dict) -> dict:
         "route": item["route_code"] or "",
         "code": item["osa_code"] or "",
         "salesman": item["salesman"] or "",
+        "supervisor": item["supervisor"] or "",
         "daily": {
             "sales": _round(item["daily_sales"]),
             "returns": _round(item["daily_returns"]),

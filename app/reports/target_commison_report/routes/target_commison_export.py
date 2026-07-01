@@ -33,12 +33,12 @@ CENTER = Alignment(horizontal="center", vertical="center")
 
 
 REGION_SUB_HEADERS = [
-    "Route", "Code", "Salesman",
+    "Route", "Code", "Salesman", "Supervisor",
     "Sales", "Returns", "Retn %", "Net Sales", "Target", "Achv %",
     "Sales", "Returns", "Retn %", "Net Sales", "Target", "Achv %",
     "Achievement (Projected)", "Target", "Achv %",
 ]
-TOTAL_COLS = len(REGION_SUB_HEADERS)  # 17
+TOTAL_COLS = len(REGION_SUB_HEADERS)  # 19
 
 SUMMARY_SUB_HEADERS = [
     "Region",
@@ -133,21 +133,21 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
         ws = wb.create_sheet((group_name or "Unknown")[:30])
 
         # Group headers (row 1)
-        # Cols A-C: blank header band (sits above Route + Code + Salesman)
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3)
+        # Cols A-D: blank header band (sits above Route + Code + Salesman + Supervisor)
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
         _style_header(ws.cell(1, 1, ""))
-        # DAILY (cols D-I = 4..9)
-        ws.merge_cells(start_row=1, start_column=4, end_row=1, end_column=9)
-        ws.cell(1, 4, f"DAILY ({to_date})")
-        _style_header(ws.cell(1, 4))
-        # CUMULATIVE (cols J-O = 10..15)
-        ws.merge_cells(start_row=1, start_column=10, end_row=1, end_column=15)
-        ws.cell(1, 10, f"CUMULATIVE ({from_date} – {to_date})")
-        _style_header(ws.cell(1, 10))
-        # ESTIMATED MONTHLY SALES (cols P-R = 16..18)
-        ws.merge_cells(start_row=1, start_column=16, end_row=1, end_column=18)
-        ws.cell(1, 16, "ESTIMATED MONTHLY SALES")
-        _style_header(ws.cell(1, 16))
+        # DAILY (cols E-J = 5..10)
+        ws.merge_cells(start_row=1, start_column=5, end_row=1, end_column=10)
+        ws.cell(1, 5, f"DAILY ({to_date})")
+        _style_header(ws.cell(1, 5))
+        # CUMULATIVE (cols K-P = 11..16)
+        ws.merge_cells(start_row=1, start_column=11, end_row=1, end_column=16)
+        ws.cell(1, 11, f"CUMULATIVE ({from_date} – {to_date})")
+        _style_header(ws.cell(1, 11))
+        # ESTIMATED MONTHLY SALES (cols Q-S = 17..19)
+        ws.merge_cells(start_row=1, start_column=17, end_row=1, end_column=19)
+        ws.cell(1, 17, "ESTIMATED MONTHLY SALES")
+        _style_header(ws.cell(1, 17))
 
         # Sub-headers (row 2)
         for col, header in enumerate(REGION_SUB_HEADERS, 1):
@@ -171,6 +171,7 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
                 item["route_code"],
                 item["osa_code"],
                 item["salesman"],
+                item["supervisor"],
                 # DAILY block
                 item["daily_sales"],
                 item["daily_returns"],
@@ -225,7 +226,7 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
         )
 
         _write_row(ws, row_idx, [
-            f"{group_name} TOTAL", "", "",
+            f"{group_name} TOTAL", "", "", "",
             tot["daily_sales"],
             tot["daily_returns"],
             round(daily_ret_pct, 2),
@@ -243,7 +244,7 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
             round(month_pct, 2),
         ], fill=BLUE, bold=True)
         ws.merge_cells(start_row=row_idx, start_column=1,
-                       end_row=row_idx, end_column=3)
+                       end_row=row_idx, end_column=4)
 
         # ----- Summary sheet row for this region -----
         _write_row(summary_ws, summary_row, [
