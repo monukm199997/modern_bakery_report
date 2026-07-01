@@ -17,8 +17,9 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
     base_sql = f"""
             FROM tbl_trip tt
             LEFT JOIN tbl_vehicle tv ON tv.id = tt.vehicle_id
-            {ctx['join_sql']}
+            LEFT JOIN tbl_route rt ON rt.vehicle_id = tt.vehicle_id
             LEFT JOIN salesman s ON s.route_id = rt.id
+            LEFT JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
         """
     count_sql = f"""
@@ -32,6 +33,9 @@ def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Que
 
     query = f"""
         SELECT
+            r.region_code,
+            r.region_name,
+            rt.route_code,
             rt.route_name,
             s.name,
             s.osa_code,
