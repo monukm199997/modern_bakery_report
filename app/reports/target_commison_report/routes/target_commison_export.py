@@ -1,7 +1,5 @@
 import os
 import tempfile
-from calendar import monthrange
-from collections import defaultdict
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
@@ -10,203 +8,19 @@ from openpyxl import Workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.target_commison_report.schemas.schemas import SalesAchievementSchema
-from app.reports.target_commison_report.utils.target_commison_helper import (
-    prepare_all_contexts,
-    resolve_group_by,
+# Data pipeline now lives in the table-view module; the export only renders it.
+from app.reports.target_commison_report.routes.target_commison_table import (
+    get_sales_achievement_data,
 )
 
 
 router = APIRouter(tags=["Target Commission Report"], dependencies=[Depends(get_current_user)])
-
-def fetch_sales_data(db: Session, ctx: dict, to_date: str):
-    sql = f"""
-        SELECT
-            co.company_name        AS company,
-            rg.region_name          AS region,
-            rt.route_code           AS route_code,
-            s.id                    AS salesman_id,
-            s.name                  AS salesman_name,
-            s.osa_code              AS osa_code,
-            COALESCE(ROUND(
-                SUM(CASE
-                    WHEN DATE(ih.invoice_date) = :daily_date
-                    THEN {ctx['quantity']}
-                    ELSE 0
-                END), 6
-            ), 0) AS daily_sales,
-            COALESCE(ROUND(SUM({ctx['quantity']}), 6), 0) AS cumulative_sales
-        FROM invoice_headers ih
-        LEFT JOIN invoice_details id ON id.header_id = ih.id
-        LEFT JOIN salesman       s  ON s.id = ih.salesman_id
-        LEFT JOIN tbl_company    co ON co.id = s.company_id
-        LEFT JOIN item_uoms      iu ON iu.item_id = id.item_id
-                                   AND iu.uom_id  = id.uom
-        {ctx['join_sql']}
-        WHERE {ctx['where_sql']}
-        GROUP BY co.company_name, rg.region_name, rt.route_code,
-                 s.id, s.name, s.osa_code
-        ORDER BY co.company_name, rg.region_name, s.name
-    """
-    params = {**ctx["params"], "daily_date": to_date}
-    return db.execute(text(sql), params).mappings().all()
-
-
-def fetch_returns_data(db: Session, ctx: dict, to_date: str):
-    sql = f"""
-        SELECT
-            co.company_name AS company,
-            rg.region_name   AS region,
-            s.id             AS salesman_id,
-            s.name           AS salesman_name,
-            s.osa_code       AS osa_code,
-            rt.route_code    AS route_code,
-            COALESCE(ROUND(
-                SUM(CASE
-                    WHEN DATE(rh.created_at) = :daily_date
-                    THEN {ctx['quantity']}
-                    ELSE 0
-                END), 6
-            ), 0) AS daily_returns,
-            COALESCE(ROUND(SUM({ctx['quantity']}), 6), 0) AS cumulative_returns
-        FROM return_header rh
-        LEFT JOIN return_details rd ON rd.header_id = rh.id
-        LEFT JOIN salesman       s  ON s.id = rh.salesman_id
-        LEFT JOIN tbl_company    co ON co.id = s.company_id
-        LEFT JOIN item_uoms      iu ON iu.item_id = rd.item_id
-                                   AND iu.uom_id  = rd.uom_id
-        {ctx['join_sql']}
-        WHERE {ctx['where_sql']}
-        GROUP BY co.company_name, rg.region_name, s.id, s.name, s.osa_code,
-                 rt.route_code
-    """
-    params = {**ctx["params"], "daily_date": to_date}
-    return db.execute(text(sql), params).mappings().all()
-
-
-def fetch_target_data(db: Session, ctx: dict):
-    sql = f"""
-        SELECT
-            co.company_name AS company,
-            rg.region_name   AS region,
-            s.id             AS salesman_id,
-            s.name           AS salesman_name,
-            s.osa_code       AS osa_code,
-            rt.route_code    AS route_code,
-            COALESCE(SUM(tc.total_target_amount), 0) AS target
-        FROM target_commison tc
-        {ctx['join_sql']}
-        LEFT JOIN tbl_company co ON co.id = s.company_id
-        WHERE {ctx['where_sql']}
-        GROUP BY co.company_name, rg.region_name, s.id, s.name, s.osa_code,
-                 rt.route_code
-    """
-    return db.execute(text(sql), ctx["params"]).mappings().all()
-
-
-# =====================================================================
-# AGGREGATION
-# =====================================================================
-
-def compute_grouped_rows(sales_data, return_data, target_data,
-                         group_by: str,
-                         total_days: int, current_day: int):
-
-    def key_of(r):
-        return (r.get(group_by) or "(Unknown)", r["salesman_id"])
-
-    sales_map = {key_of(r): r for r in sales_data}
-    return_map = {key_of(r): r for r in return_data}
-    target_map = {key_of(r): r for r in target_data}
-
-    all_keys = set(sales_map) | set(return_map) | set(target_map)
-
-    def pick(key, field):
-        for m in (sales_map, return_map, target_map):
-            row = m.get(key)
-            if row and row.get(field):
-                return row[field]
-        return ""
-
-    grouped = defaultdict(list)
-
-    for key in all_keys:
-        group_value, salesman_id = key
-        sales_row = sales_map.get(key, {})
-        ret_row = return_map.get(key, {})
-        tgt_row = target_map.get(key, {})
-
-        daily_sales = float(sales_row.get("daily_sales", 0) or 0)
-        cumulative_sales = float(sales_row.get("cumulative_sales", 0) or 0)
-        daily_returns = float(ret_row.get("daily_returns", 0) or 0)
-        cumulative_returns = float(ret_row.get("cumulative_returns", 0) or 0)
-        monthly_target = float(tgt_row.get("target", 0) or 0)
-
-        daily_net = daily_sales - daily_returns
-        cumulative_net = cumulative_sales - cumulative_returns
-
-        daily_target = monthly_target / total_days if total_days else 0
-        mtd_target = monthly_target * current_day / total_days if total_days else 0
-
-        daily_ach = (daily_net / daily_target * 100) if daily_target else 0
-        cumulative_ach = (cumulative_net / mtd_target * 100) if mtd_target else 0
-
-        projected_sales = (
-            (cumulative_net / current_day) * total_days if current_day else 0
-        )
-        projected_ach = (
-            (projected_sales / monthly_target * 100) if monthly_target else 0
-        )
-
-        # Return %
-        daily_ret_pct = (daily_returns / daily_sales * 100) if daily_sales else 0
-        mtd_ret_pct = (
-            cumulative_returns / cumulative_sales * 100
-            if cumulative_sales else 0
-        )
-
-        grouped[group_value].append({
-            "route_code": pick(key, "route_code"),
-            "osa_code": pick(key, "osa_code"),
-            "salesman": pick(key, "salesman_name"),
-            "daily_sales": daily_sales,
-            "daily_returns": daily_returns,
-            "daily_ret_pct": daily_ret_pct,
-            "daily_net": daily_net,
-            "daily_target": daily_target,
-            "daily_ach": daily_ach,
-            "cumulative_sales": cumulative_sales,
-            "cumulative_returns": cumulative_returns,
-            "mtd_ret_pct": mtd_ret_pct,
-            "cumulative_net": cumulative_net,
-            "mtd_target": mtd_target,
-            "cumulative_ach": cumulative_ach,
-            "projected_sales": projected_sales,
-            "monthly_target": monthly_target,
-            "projected_ach": projected_ach,
-        })
-
-    for group_value in grouped:
-        grouped[group_value].sort(key=lambda x: (x["salesman"] or "").lower())
-
-    return grouped
-
-
-def compute_region_rows(sales_data, return_data, target_data,
-                        total_days: int, current_day: int):
-    """Backward-compat wrapper. Delegates to compute_grouped_rows."""
-    return compute_grouped_rows(
-        sales_data, return_data, target_data,
-        group_by="region",
-        total_days=total_days,
-        current_day=current_day,
-    )
 
 
 YELLOW = PatternFill(start_color="993442", end_color="993442", fill_type="solid")
@@ -282,38 +96,29 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
     wb.remove(wb.active)
 
     summary_ws = wb.create_sheet("Summary", 0)
-    summary_ws.merge_cells(start_row=1, start_column=1,
-                           end_row=1, end_column=len(SUMMARY_SUB_HEADERS))
-    summary_ws.cell(1, 1, (
-        f"Modern Bakery LLC.\n"
-        f"ESTIMATED SALES & ACHIEVEMENT "
-        f"(From {from_date} To {to_date})"
-    ))
-    summary_ws.cell(1, 1).font = Font(bold=True, size=14)
-    summary_ws.cell(1, 1).alignment = CENTER
 
-    # Group headers (row 2)
-    summary_ws.cell(2, 1, "")  # Group label (Company/Region/Route) sits empty above
-    _style_header(summary_ws.cell(2, 1))
+    # Group headers (row 1)
+    summary_ws.cell(1, 1, "")  # Group label (Company/Region/Route) sits empty above
+    _style_header(summary_ws.cell(1, 1))
     # DAILY group: cols 2-4
-    summary_ws.merge_cells(start_row=2, start_column=2, end_row=2, end_column=4)
-    summary_ws.cell(2, 2, f"DAILY ({to_date})")
-    _style_header(summary_ws.cell(2, 2))
+    summary_ws.merge_cells(start_row=1, start_column=2, end_row=1, end_column=4)
+    summary_ws.cell(1, 2, f"DAILY ({to_date})")
+    _style_header(summary_ws.cell(1, 2))
     # CUMULATIVE group: cols 5-7
-    summary_ws.merge_cells(start_row=2, start_column=5, end_row=2, end_column=7)
-    summary_ws.cell(2, 5, f"CUMULATIVE ({from_date} – {to_date})")
-    _style_header(summary_ws.cell(2, 5))
+    summary_ws.merge_cells(start_row=1, start_column=5, end_row=1, end_column=7)
+    summary_ws.cell(1, 5, f"CUMULATIVE ({from_date} – {to_date})")
+    _style_header(summary_ws.cell(1, 5))
     # MONTHLY group: cols 8-10
-    summary_ws.merge_cells(start_row=2, start_column=8, end_row=2, end_column=10)
-    summary_ws.cell(2, 8, "ESTIMATED MONTHLY SALES")
-    _style_header(summary_ws.cell(2, 8))
+    summary_ws.merge_cells(start_row=1, start_column=8, end_row=1, end_column=10)
+    summary_ws.cell(1, 8, "ESTIMATED MONTHLY SALES")
+    _style_header(summary_ws.cell(1, 8))
 
-    # Sub-headers (row 3) — first column label is dynamic ("Company", "Region", or "Route")
+    # Sub-headers (row 2) — first column label is dynamic ("Company", "Region", or "Route")
     for col, header in enumerate(SUMMARY_SUB_HEADERS, 1):
         label = group_label if col == 1 else header
-        _style_header(summary_ws.cell(3, col, label))
+        _style_header(summary_ws.cell(2, col, label))
 
-    summary_row = 4
+    summary_row = 3
     grand = {
         "daily_net": 0, "daily_target": 0,
         "mtd_net": 0, "mtd_target": 0,
@@ -327,43 +132,31 @@ def build_workbook(grouped_data, from_date: str, to_date: str, group_label: str 
     for group_name, rows in grouped_data.items():
         ws = wb.create_sheet((group_name or "Unknown")[:30])
 
-        # Title (row 1)
-        ws.merge_cells(start_row=1, start_column=1,
-                       end_row=1, end_column=TOTAL_COLS)
-        ws.cell(1, 1, (
-            f"Modern Bakery LLC.\n"
-            f"ESTIMATED SALES & ACHIEVEMENT "
-            f"(From {from_date} To {to_date})"
-        ))
-        ws.cell(1, 1).font = Font(bold=True, size=14)
-        ws.cell(1, 1).alignment = CENTER
-        ws.row_dimensions[1].height = 36
-
-        # Group headers (row 2)
+        # Group headers (row 1)
         # Cols A-C: blank header band (sits above Route + Code + Salesman)
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=3)
-        _style_header(ws.cell(2, 1, ""))
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3)
+        _style_header(ws.cell(1, 1, ""))
         # DAILY (cols D-I = 4..9)
-        ws.merge_cells(start_row=2, start_column=4, end_row=2, end_column=9)
-        ws.cell(2, 4, f"DAILY ({to_date})")
-        _style_header(ws.cell(2, 4))
+        ws.merge_cells(start_row=1, start_column=4, end_row=1, end_column=9)
+        ws.cell(1, 4, f"DAILY ({to_date})")
+        _style_header(ws.cell(1, 4))
         # CUMULATIVE (cols J-O = 10..15)
-        ws.merge_cells(start_row=2, start_column=10, end_row=2, end_column=15)
-        ws.cell(2, 10, f"CUMULATIVE ({from_date} – {to_date})")
-        _style_header(ws.cell(2, 10))
+        ws.merge_cells(start_row=1, start_column=10, end_row=1, end_column=15)
+        ws.cell(1, 10, f"CUMULATIVE ({from_date} – {to_date})")
+        _style_header(ws.cell(1, 10))
         # ESTIMATED MONTHLY SALES (cols P-R = 16..18)
-        ws.merge_cells(start_row=2, start_column=16, end_row=2, end_column=18)
-        ws.cell(2, 16, "ESTIMATED MONTHLY SALES")
-        _style_header(ws.cell(2, 16))
+        ws.merge_cells(start_row=1, start_column=16, end_row=1, end_column=18)
+        ws.cell(1, 16, "ESTIMATED MONTHLY SALES")
+        _style_header(ws.cell(1, 16))
 
-        # Sub-headers (row 3)
+        # Sub-headers (row 2)
         for col, header in enumerate(REGION_SUB_HEADERS, 1):
-            _style_header(ws.cell(3, col, header))
+            _style_header(ws.cell(2, col, header))
 
-        # Freeze rows 1-3 so they stay visible while scrolling
-        ws.freeze_panes = "A4"
+        # Freeze header rows 1-2 so they stay visible while scrolling
+        ws.freeze_panes = "A3"
 
-        row_idx = 4
+        row_idx = 3
         tot = {
             "daily_sales": 0, "daily_returns": 0, "daily_net": 0,
             "daily_target": 0,
@@ -521,33 +314,17 @@ def sales_achievement_export(
     payload: SalesAchievementSchema,
     db: Session = Depends(get_db),
 ):
-    from_dt = datetime.strptime(payload.from_date, "%Y-%m-%d")
-    to_dt = datetime.strptime(payload.to_date, "%Y-%m-%d")
+    # Same data the table view builds — export only renders it to Excel.
+    grouped_data, meta = get_sales_achievement_data(db, payload)
 
-    total_days = monthrange(from_dt.year, from_dt.month)[1]
-    current_day = to_dt.day
-
-    ctxs = prepare_all_contexts(payload)
-
-    sales_data = fetch_sales_data(db, ctxs["sales"], payload.to_date)
-    return_data = fetch_returns_data(db, ctxs["returns"], payload.to_date)
-    target_data = fetch_target_data(db, ctxs["target"])
-
-    group_by = resolve_group_by(payload)
+    group_by = meta["group_by"]
     group_label = {"company": "Company", "region": "Region", "route_code": "Route"}[group_by]
     file_prefix = f"sales_achievement_by_{group_by}_"
 
-    grouped_data = compute_grouped_rows(
-        sales_data, return_data, target_data,
-        group_by=group_by,
-        total_days=total_days,
-        current_day=current_day,
-    )
-
     wb = build_workbook(
         grouped_data,
-        from_date=payload.from_date,
-        to_date=payload.to_date,
+        from_date=meta["from_date"],
+        to_date=meta["to_date"],
         group_label=group_label,
     )
 

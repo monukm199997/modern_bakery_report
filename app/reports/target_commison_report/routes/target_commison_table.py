@@ -1,8 +1,9 @@
-
 from calendar import monthrange
+from collections import defaultdict
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -14,16 +15,211 @@ from app.reports.target_commison_report.utils.target_commison_helper import (
     prepare_all_contexts,
     resolve_group_by,
 )
-from app.reports.target_commison_report.routes.target_commison_export import (
-    fetch_sales_data,
-    fetch_returns_data,
-    fetch_target_data,
-    compute_grouped_rows,
-)
 
 
 router = APIRouter(tags=["Target Commission Report"], dependencies=[Depends(get_current_user)])
 
+
+# =====================================================================
+# DATA ACCESS  (sales + returns come from the same table, split by
+# document_type inside ctx['where_sql']; ctx['value_expr'] is the amount
+# column, ctx['target_expr'] the target amount column)
+# =====================================================================
+
+def _fetch_doc_data(db: Session, ctx: dict, to_date: str):
+    sql = f"""
+        SELECT
+            co.company_name AS company,
+            rg.region_name  AS region,
+            rt.route_code   AS route_code,
+            s.id            AS salesman_id,
+            s.name          AS salesman_name,
+            s.osa_code      AS osa_code,
+            COALESCE(ROUND(
+                SUM(CASE
+                    WHEN sdh.invoice_date = CAST(:daily_date AS date)
+                    THEN {ctx['value_expr']}
+                    ELSE 0
+                END)::numeric, 6
+            ), 0) AS daily_value,
+            COALESCE(ROUND(SUM({ctx['value_expr']})::numeric, 6), 0) AS cumulative_value
+        FROM sales_documents_header sdh
+        LEFT JOIN sales_documents_detail sdd
+               ON sdd.header_id = sdh.id AND sdd.deleted_at IS NULL
+        LEFT JOIN salesman    s   ON s.id  = sdh.salesman_id
+        LEFT JOIN tbl_company co  ON co.id = s.company_id
+        LEFT JOIN tbl_route   rt  ON rt.id = sdh.route_id
+        LEFT JOIN tbl_region  rg  ON rg.id = rt.region_id
+        LEFT JOIN users       sup ON sup.id = s.superwiser_id AND sup.role = 108
+        WHERE {ctx['where_sql']}
+        GROUP BY co.company_name, rg.region_name, rt.route_code,
+                 s.id, s.name, s.osa_code
+        ORDER BY co.company_name, rg.region_name, s.name
+    """
+    params = {**ctx["params"], "daily_date": to_date}
+    return db.execute(text(sql), params).mappings().all()
+
+
+def fetch_sales_data(db: Session, ctx: dict, to_date: str):
+    return _fetch_doc_data(db, ctx, to_date)
+
+
+def fetch_returns_data(db: Session, ctx: dict, to_date: str):
+    return _fetch_doc_data(db, ctx, to_date)
+
+
+def fetch_target_data(db: Session, ctx: dict):
+    sql = f"""
+        SELECT
+            co.company_name AS company,
+            rg.region_name  AS region,
+            s.id            AS salesman_id,
+            s.name          AS salesman_name,
+            s.osa_code      AS osa_code,
+            rt.route_code   AS route_code,
+            COALESCE(SUM({ctx['target_expr']}), 0) AS target
+        FROM target_commison tc
+        {ctx['join_sql']}
+        LEFT JOIN tbl_company co ON co.id = s.company_id
+        WHERE {ctx['where_sql']}
+        GROUP BY co.company_name, rg.region_name, s.id, s.name, s.osa_code,
+                 rt.route_code
+    """
+    return db.execute(text(sql), ctx["params"]).mappings().all()
+
+
+# =====================================================================
+# AGGREGATION
+# =====================================================================
+
+def compute_grouped_rows(sales_data, return_data, target_data,
+                         group_by: str,
+                         total_days: int, current_day: int):
+
+    def key_of(r):
+        return (r.get(group_by) or "(Unknown)", r["salesman_id"])
+
+    sales_map = {key_of(r): r for r in sales_data}
+    return_map = {key_of(r): r for r in return_data}
+    target_map = {key_of(r): r for r in target_data}
+
+    all_keys = set(sales_map) | set(return_map) | set(target_map)
+
+    def pick(key, field):
+        for m in (sales_map, return_map, target_map):
+            row = m.get(key)
+            if row and row.get(field):
+                return row[field]
+        return ""
+
+    grouped = defaultdict(list)
+
+    for key in all_keys:
+        group_value, salesman_id = key
+        sales_row = sales_map.get(key, {})
+        ret_row = return_map.get(key, {})
+        tgt_row = target_map.get(key, {})
+
+        daily_sales = float(sales_row.get("daily_value", 0) or 0)
+        cumulative_sales = float(sales_row.get("cumulative_value", 0) or 0)
+        daily_returns = float(ret_row.get("daily_value", 0) or 0)
+        cumulative_returns = float(ret_row.get("cumulative_value", 0) or 0)
+        monthly_target = float(tgt_row.get("target", 0) or 0)
+
+        daily_net = daily_sales - daily_returns
+        cumulative_net = cumulative_sales - cumulative_returns
+
+        daily_target = monthly_target / total_days if total_days else 0
+        mtd_target = monthly_target * current_day / total_days if total_days else 0
+
+        daily_ach = (daily_net / daily_target * 100) if daily_target else 0
+        cumulative_ach = (cumulative_net / mtd_target * 100) if mtd_target else 0
+
+        projected_sales = (
+            (cumulative_net / current_day) * total_days if current_day else 0
+        )
+        projected_ach = (
+            (projected_sales / monthly_target * 100) if monthly_target else 0
+        )
+
+        # Return %
+        daily_ret_pct = (daily_returns / daily_sales * 100) if daily_sales else 0
+        mtd_ret_pct = (
+            cumulative_returns / cumulative_sales * 100
+            if cumulative_sales else 0
+        )
+
+        grouped[group_value].append({
+            "route_code": pick(key, "route_code"),
+            "osa_code": pick(key, "osa_code"),
+            "salesman": pick(key, "salesman_name"),
+            "daily_sales": daily_sales,
+            "daily_returns": daily_returns,
+            "daily_ret_pct": daily_ret_pct,
+            "daily_net": daily_net,
+            "daily_target": daily_target,
+            "daily_ach": daily_ach,
+            "cumulative_sales": cumulative_sales,
+            "cumulative_returns": cumulative_returns,
+            "mtd_ret_pct": mtd_ret_pct,
+            "cumulative_net": cumulative_net,
+            "mtd_target": mtd_target,
+            "cumulative_ach": cumulative_ach,
+            "projected_sales": projected_sales,
+            "monthly_target": monthly_target,
+            "projected_ach": projected_ach,
+        })
+
+    for group_value in grouped:
+        grouped[group_value].sort(key=lambda x: (x["salesman"] or "").lower())
+
+    return grouped
+
+
+# =====================================================================
+# CANONICAL PIPELINE  (shared by this table view AND the export route)
+# =====================================================================
+
+def get_sales_achievement_data(db: Session, payload: SalesAchievementSchema):
+    """
+    Run the full report pipeline once and return (grouped_data, meta).
+
+    This is the single source of truth for the report's data. The table
+    endpoint below turns it into JSON; the export route turns the same
+    grouped_data into an Excel workbook.
+    """
+    from_dt = datetime.strptime(payload.from_date, "%Y-%m-%d")
+    to_dt = datetime.strptime(payload.to_date, "%Y-%m-%d")
+
+    total_days = monthrange(from_dt.year, from_dt.month)[1]
+    current_day = to_dt.day
+
+    ctxs = prepare_all_contexts(payload)
+    sales_data = fetch_sales_data(db, ctxs["sales"], payload.to_date)
+    return_data = fetch_returns_data(db, ctxs["returns"], payload.to_date)
+    target_data = fetch_target_data(db, ctxs["target"])
+
+    group_by = resolve_group_by(payload)
+    grouped_data = compute_grouped_rows(
+        sales_data, return_data, target_data,
+        group_by=group_by,
+        total_days=total_days,
+        current_day=current_day,
+    )
+
+    meta = {
+        "from_date": payload.from_date,
+        "to_date": payload.to_date,
+        "total_days_in_month": total_days,
+        "current_day": current_day,
+        "group_by": group_by,
+    }
+    return grouped_data, meta
+
+
+# =====================================================================
+# JSON ROW BUILDERS
+# =====================================================================
 
 def _round(value, ndigits=2):
     """Round numerics for the API; leave non-numeric values untouched."""
@@ -112,33 +308,19 @@ def _build_total(
     }
 
 
+# =====================================================================
+# TABLE ENDPOINT
+# =====================================================================
+
 @router.post("/sales-achievement-table")
 def sales_achievement_table(
     payload: SalesAchievementSchema,
     db: Session = Depends(get_db),
 ):
-    from_dt = datetime.strptime(payload.from_date, "%Y-%m-%d")
-    to_dt = datetime.strptime(payload.to_date, "%Y-%m-%d")
+    grouped_data, meta = get_sales_achievement_data(db, payload)
 
-    total_days = monthrange(from_dt.year, from_dt.month)[1]
-    current_day = to_dt.day
-
-    ctxs = prepare_all_contexts(payload)
-    sales_data = fetch_sales_data(db, ctxs["sales"], payload.to_date)
-    return_data = fetch_returns_data(db, ctxs["returns"], payload.to_date)
-    target_data = fetch_target_data(db, ctxs["target"])
-
-    # Grouping is decided by the most specific filter applied:
-    # Route > Region > Company. If none are applied, default to Company.
-    group_by = resolve_group_by(payload)
+    group_by = meta["group_by"]
     total_row_type = f"{group_by}_total"
-
-    grouped_data = compute_grouped_rows(
-        sales_data, return_data, target_data,
-        group_by=group_by,
-        total_days=total_days,
-        current_day=current_day,
-    )
 
     rows = []
 
@@ -211,13 +393,6 @@ def sales_achievement_table(
     ))
 
     return {
-        "meta": {
-            "from_date": payload.from_date,
-            "to_date": payload.to_date,
-            "total_days_in_month": total_days,
-            "current_day": current_day,
-            "row_count": len(rows),
-            "group_by": group_by,  # "company", "region", or "route" — tells the frontend what the "region" field on each row actually represents
-        },
+        "meta": {**meta, "row_count": len(rows)},
         "rows": rows,
     }

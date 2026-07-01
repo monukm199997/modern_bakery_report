@@ -34,6 +34,7 @@ class SalesAchievementSchema(BaseModel):
     company_ids: Optional[List[int]] = None
     region_ids: Optional[List[int]] = None
     route_ids: Optional[List[int]] = None
+    super_wiser_ids: Optional[List[int]] = None       # supervisor filter (users.role = 108)
 
     # ---- derived values; the routes/helper read these unchanged ----
 

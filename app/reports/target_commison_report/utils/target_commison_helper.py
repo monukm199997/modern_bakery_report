@@ -3,119 +3,100 @@ from app.utils.helper import validate_mandatory
 from datetime import datetime
 
 
-# ---------- shared quantity expressions ----------
-
-def invoice_quantity_expr() -> str:
-    """Quantity * UPC for invoice_details rows."""
-    return """
-        CASE
-            WHEN iu.upc IS NULL THEN 0
-            ELSE id.quantity::numeric * iu.upc::numeric
-        END
-    """
+# ---------------------------------------------------------------------------
+# document_type buckets
+# Anything NOT in either list is ignored by the report. Keep these exhaustive.
+# ---------------------------------------------------------------------------
+SALES_DOC_TYPES = ["ZVCS", "YDO", "YDI", "YSCR", "ZSCS", "ZFCD", "YFCD"]
+RETURN_DOC_TYPES = ["YRSC", "ZRVS"]
 
 
-def return_quantity_expr() -> str:
-    """Quantity * UPC for return_details rows."""
-    return """
-        CASE
-            WHEN iu.upc IS NULL THEN 0
-            ELSE rd.item_quantity::numeric * iu.upc::numeric
-        END
-    """
+# ---------------------------------------------------------------------------
+# Measures (amount only — target_commison stores amount, not quantity)
+#
+# Column names are fixed here (never taken from user input), so interpolating
+# them into SQL below is safe.
+#
+# CONFIRM which detail column matches the printed report's "Sales":
+#   net_total (default), item_total, itemvalue, or gross_total.
+# ---------------------------------------------------------------------------
+SALES_VALUE_EXPR = "sdd.net_total::numeric"
+TARGET_EXPR = "tc.total_target_amount"
 
 
-# ---------- generic builder for sales + returns ----------
-
-def _build_txn_query_parts(
-    payload: SalesAchievementSchema,
-    date_column: str,
-    route_alias_source: str,
-):
-    """
-    Build joins / where / params for transaction-style queries
-    (invoices, returns). The tbl_route join is ALWAYS added so that
-    rt.* / rg.* references in the main SELECT never fail.
-
-    date_column         : e.g. "ih.invoice_date" or "rh.created_at"
-    route_alias_source  : the table.column to link tbl_route to,
-                          e.g. "ih.route_id" or "rh.route_id"
-    """
-    joins = [
-        f"LEFT JOIN tbl_route rt ON rt.id = {route_alias_source}",
-        "LEFT JOIN tbl_region rg ON rg.id = rt.region_id",
-    ]
-    where_fragments = []
-    params = {}
-
-
-    where_fragments.append(
-        f"{date_column} >= CAST(:from_date AS date) "
-        f"AND {date_column} < CAST(:to_date AS date) + INTERVAL '1 day'"
-    )
-    params["from_date"] = payload.from_date
-    params["to_date"] = payload.to_date
-
+# ---------------------------------------------------------------------------
+# shared filters
+# These MUST be applied identically to sales, returns AND targets, otherwise
+# the per-salesman merge in compute_grouped_rows splits one salesman into
+# mismatched rows. Assumes aliases s (salesman), rt (route), sup (supervisor)
+# exist in the query.
+# ---------------------------------------------------------------------------
+def _apply_filters(payload: SalesAchievementSchema, where: list, params: dict):
     if payload.company_ids:
-        where_fragments.append("s.company_id = ANY(:company_ids)")
+        where.append("s.company_id = ANY(:company_ids)")
         params["company_ids"] = payload.company_ids
 
     if payload.region_ids:
-        where_fragments.append("rt.region_id = ANY(:region_ids)")
+        where.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
 
     if payload.route_ids:
-        where_fragments.append("rt.id = ANY(:route_ids)")
+        where.append("rt.id = ANY(:route_ids)")
         params["route_ids"] = payload.route_ids
 
-    joins = list(dict.fromkeys(joins))
-    return joins, where_fragments, params
+    if payload.super_wiser_ids:
+        where.append("sup.id = ANY(:super_wiser_ids)")
+        params["super_wiser_ids"] = payload.super_wiser_ids
+
+
+# ---------------------------------------------------------------------------
+# sales / returns context
+# Same source table (sales_documents_header + _detail); the only difference
+# between sales and returns is the document_type set.
+# ---------------------------------------------------------------------------
+def _prepare_doc_context(payload: SalesAchievementSchema, doc_types: list):
+    where = [
+        "sdh.invoice_date >= CAST(:from_date AS date)",
+        "sdh.invoice_date <= CAST(:to_date AS date)",
+        "sdh.deleted_at IS NULL",                       # CONFIRM: exclude soft-deleted docs
+        "sdh.document_type = ANY(:doc_types)",
+    ]
+    params = {
+        "from_date": payload.from_date,
+        "to_date": payload.to_date,
+        "doc_types": doc_types,
+    }
+    _apply_filters(payload, where, params)
+    return {
+        "where_sql": " AND ".join(where),
+        "params": params,
+        "value_expr": SALES_VALUE_EXPR,
+    }
 
 
 def prepare_sales_context(payload: SalesAchievementSchema):
-    joins, where_fragments, params = _build_txn_query_parts(
-        payload,
-        date_column="ih.invoice_date",
-        route_alias_source="ih.route_id",
-    )
-    return {
-        "join_sql": "\n".join(joins),
-        "where_sql": " AND ".join(where_fragments),
-        "params": params,
-        "quantity": invoice_quantity_expr(),
-    }
+    return _prepare_doc_context(payload, SALES_DOC_TYPES)
 
 
 def prepare_returns_context(payload: SalesAchievementSchema):
-    joins, where_fragments, params = _build_txn_query_parts(
-        payload,
-        date_column="rh.created_at",
-        route_alias_source="rh.route_id",
-    )
-    return {
-        "join_sql": "\n".join(joins),
-        "where_sql": " AND ".join(where_fragments),
-        "params": params,
-        "quantity": return_quantity_expr(),
-    }
+    return _prepare_doc_context(payload, RETURN_DOC_TYPES)
 
 
-# ---------- target builder ----------
-
+# ---------------------------------------------------------------------------
+# target context
+# Targets live in target_commison keyed by start_month / start_year.
+# from_date and to_date are guaranteed to be in the same month (schema).
+# ---------------------------------------------------------------------------
 def prepare_target_context(payload: SalesAchievementSchema):
-    """
-    Targets live in target_commison keyed by start_month / start_year.
-    We assume from_date and to_date are in the same month (validated
-    in the schema).
-    """
     from_dt = datetime.strptime(payload.from_date, "%Y-%m-%d")
 
     joins = [
-        "LEFT JOIN tbl_route rt ON rt.id = tc.route_id",
-        "LEFT JOIN tbl_region rg ON rg.id = rt.region_id",
-        "LEFT JOIN salesman s ON s.id = tc.salesman_id",
+        "LEFT JOIN tbl_route  rt  ON rt.id = tc.route_id",
+        "LEFT JOIN tbl_region rg  ON rg.id = rt.region_id",
+        "LEFT JOIN salesman   s   ON s.id  = tc.salesman_id",
+        "LEFT JOIN users      sup ON sup.id = s.superwiser_id AND sup.role = 108",
     ]
-    where_fragments = [
+    where = [
         "tc.start_month = :month",
         "tc.start_year = :year",
     ]
@@ -123,29 +104,20 @@ def prepare_target_context(payload: SalesAchievementSchema):
         "month": from_dt.month,
         "year": from_dt.year,
     }
-
-    if payload.company_ids:
-        where_fragments.append("s.company_id = ANY(:company_ids)")
-        params["company_ids"] = payload.company_ids
-
-    if payload.region_ids:
-        where_fragments.append("rt.region_id = ANY(:region_ids)")
-        params["region_ids"] = payload.region_ids
-
-    if payload.route_ids:
-        where_fragments.append("rt.id = ANY(:route_ids)")
-        params["route_ids"] = payload.route_ids
+    _apply_filters(payload, where, params)
 
     joins = list(dict.fromkeys(joins))
     return {
         "join_sql": "\n".join(joins),
-        "where_sql": " AND ".join(where_fragments),
+        "where_sql": " AND ".join(where),
         "params": params,
+        "target_expr": TARGET_EXPR,
     }
 
 
-# ---------- single entry point used by the route ----------
-
+# ---------------------------------------------------------------------------
+# single entry point used by the routes
+# ---------------------------------------------------------------------------
 def prepare_all_contexts(payload: SalesAchievementSchema):
     """Validate once, then build all three contexts."""
     validate_mandatory(payload)
@@ -156,16 +128,12 @@ def prepare_all_contexts(payload: SalesAchievementSchema):
     }
 
 
-# ---------- grouping resolution (Company -> Region -> Route) ----------
-
+# ---------------------------------------------------------------------------
+# grouping resolution (Company -> Region -> Route)
+# Priority (most specific wins): Route > Region > Company.
+# Supervisor is a filter only, not a grouping dimension.
+# ---------------------------------------------------------------------------
 def resolve_group_by(payload: SalesAchievementSchema) -> str:
-    """
-    Decide what the report rows / export tabs should be grouped by,
-    based on which filters are applied.
-
-    Priority (most specific wins): Route > Region > Company.
-    If none of the three filters are applied, default to Company.
-    """
     if payload.route_ids:
         return "route_code"
     if payload.region_ids:
