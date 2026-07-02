@@ -1,6 +1,6 @@
-SALES_DOCUMENT_TYPES = ["ZVCS", "YDO", "YDI", "YSCR", "ZSCS", "ZFCD", "YFCD"]
+SALES_DOC_TYPES = "'ZVCS','YDO','YDI','YSCR','ZSCS','ZFCD','YFCD','YSDR'"
 
-RETURN_DOCUMENT_TYPES = ["YRSC", "ZRVS"]
+RETURN_DOC_TYPES = "'YRSC','ZRVS'"
 
 
 DRILL_DOWN_MAP = {
@@ -16,10 +16,10 @@ DRILL_DOWN_MAP = {
         i.code AS item_code,
         i.name AS item,
         i.barcode,
-        iu.name AS uom_name,
+        u.name AS uom_name,
         iu.upc AS upc
         """,
-        "group_by": "i.code, i.name, i.barcode, iu.name, iu.upc",
+        "group_by": "i.code, i.name, i.barcode, u.name, iu.upc",
     },
     "salesman": {
         "select": """
@@ -32,9 +32,11 @@ DRILL_DOWN_MAP = {
     "route": {
         "select": """
         rt.route_code,
-        rt.route_name AS route
+        rt.route_name AS route,
+        sm.name AS salesman,
+        sm.osa_code AS salesman_code
         """,
-        "group_by": "rt.route_code, rt.route_name",
+        "group_by": "rt.route_code, rt.route_name, sm.name, sm.osa_code",
     },
     "supervisor": {
         "select": "sup.name AS supervisor",
@@ -63,7 +65,7 @@ SALES_REVENUE = """
 REVENUE_GROSS_SALES = f"""COALESCE(
                 SUM(
                     CASE
-                        WHEN sdh.document_type = ANY(:sales_document_types)
+                        WHEN sdh.document_type IN ({SALES_DOC_TYPES})
                         THEN {SALES_REVENUE}
                         ELSE 0
                     END
@@ -75,7 +77,7 @@ REVENUE_GROSS_SALES = f"""COALESCE(
 REVENUE_GROSS_RETURN = f"""COALESCE(
                 SUM(
                     CASE
-                        WHEN sdh.document_type = ANY(:return_document_types)
+                        WHEN sdh.document_type IN ({RETURN_DOC_TYPES})
                         THEN {SALES_REVENUE}
                         ELSE 0
                     END
@@ -89,7 +91,7 @@ REVENUE_ZERO = f"""
             COALESCE(
                     SUM(
                         CASE
-                            WHEN sdh.document_type = ANY(:sales_document_types)
+                            WHEN sdh.document_type IN ({SALES_DOC_TYPES})
                             THEN {SALES_REVENUE}
                             ELSE 0
                         END
@@ -102,7 +104,7 @@ TOTAL_RETURN_REVENUE = f"""
             COALESCE(
                     SUM(
                         CASE
-                            WHEN sdh.document_type = ANY(:return_document_types)
+                            WHEN sdh.document_type IN ({RETURN_DOC_TYPES})
                             THEN {SALES_REVENUE}
                             ELSE 0
                         END
@@ -115,7 +117,7 @@ TOTAL_SALES_REVENUE = f"""
                  COALESCE(
                         SUM(
                             CASE
-                                WHEN sdh.document_type = ANY(:sales_document_types)
+                                WHEN sdh.document_type IN ({SALES_DOC_TYPES})
                                 THEN {SALES_REVENUE}
                                 ELSE 0
                             END
@@ -156,7 +158,7 @@ VOLUME_GROSS_SALES = f"""
         COALESCE(
                 SUM(
                     CASE
-                        WHEN sdh.document_type = ANY(:sales_document_types)
+                        WHEN sdh.document_type IN ({SALES_DOC_TYPES})
                         THEN {SALES_VOLUME}
                         ELSE 0
                     END
@@ -169,7 +171,7 @@ VOLUME_GROSS_RETURN = f"""
         COALESCE(
             SUM(
                 CASE
-                    WHEN sdh.document_type = ANY(:return_document_types)
+                    WHEN sdh.document_type IN ({RETURN_DOC_TYPES})
                     THEN {SALES_VOLUME}
                     ELSE 0
                 END
@@ -182,7 +184,7 @@ VOLUME_ZERO = f"""
         COALESCE(
             SUM(
                 CASE
-                    WHEN sdh.document_type = ANY(:sales_document_types)
+                    WHEN sdh.document_type IN ({SALES_DOC_TYPES})
                     THEN {SALES_VOLUME}
                     ELSE 0
                 END
@@ -195,7 +197,7 @@ TOTAL_RETURN_VOLUME = f"""
             COALESCE(
                 SUM(
                     CASE
-                        WHEN sdh.document_type = ANY(:return_document_types)
+                        WHEN sdh.document_type IN ({RETURN_DOC_TYPES})
                         THEN {SALES_VOLUME}
                         ELSE 0
                     END
@@ -208,7 +210,7 @@ TOTAL_SALES_VOLUME = f"""
         COALESCE(
                 SUM(
                     CASE
-                        WHEN sdh.document_type = ANY(:sales_document_types)
+                        WHEN sdh.document_type IN ({SALES_DOC_TYPES})
                         THEN {SALES_VOLUME}
                         ELSE 0
                     END

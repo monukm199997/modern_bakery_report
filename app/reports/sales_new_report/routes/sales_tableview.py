@@ -21,12 +21,10 @@ def get_sales_report_table(payload: SalesReportRequest, db: Session = Depends(ge
         LEFT JOIN salesman sm ON sm.id = sdh.salesman_id
         LEFT JOIN users sup ON sup.id = sm.superwiser_id AND sup.role = 108
         LEFT JOIN items i ON i.id = sdd.item_id
-        LEFT JOIN item_uoms iu
-            ON iu.item_id = i.id
-            AND iu.status = '1'
         LEFT JOIN agent_customers ac ON ac.id = sdh.customer_id
         LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
         LEFT JOIN tbl_route rt ON rt.id = sdh.route_id
+        {ctx["extra_join_sql"]}
         WHERE {ctx["where_sql"]}
         {ctx["group_by_sql"]}
     """

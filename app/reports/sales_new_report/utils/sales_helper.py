@@ -2,8 +2,8 @@ from fastapi import HTTPException
 from app.reports.sales_new_report.schemas.sales_schema import SalesReportRequest
 from app.utils.helper import validate_mandatory
 from app.reports.sales_new_report.utils.sales_sql_query import (
-    SALES_DOCUMENT_TYPES,
-    RETURN_DOCUMENT_TYPES,
+    SALES_DOC_TYPES,
+    RETURN_DOC_TYPES,
     DRILL_DOWN_MAP,
     REVENUE_GROSS_SALES,
     REVENUE_GROSS_RETURN,
@@ -73,7 +73,20 @@ def build_sales_document_filters(payload: SalesReportRequest):
 def prepare_sales_report_context(payload: SalesReportRequest):
     validate_mandatory(payload)
 
-    selected_fields = payload.drill_down_fields or []
+    selected_fields = [f.lower() for f in (payload.drill_down_fields or [])]
+
+    extra_joins = []
+
+    if "item" in selected_fields:
+        extra_joins.extend([
+            "LEFT JOIN uom u ON u.id = sdd.uom",
+            """
+            LEFT JOIN item_uoms iu
+                ON iu.item_id = sdd.item_id
+                AND iu.uom_id = sdd.uom
+                AND iu.status = '1'
+            """
+        ])
 
     select_cols = []
     group_cols = []
@@ -118,11 +131,12 @@ def prepare_sales_report_context(payload: SalesReportRequest):
 
     where_fragments, params = build_sales_document_filters(payload)
 
-    params["sales_document_types"] = SALES_DOCUMENT_TYPES
-    params["return_document_types"] = RETURN_DOCUMENT_TYPES
+    params["sales_document_types"] = SALES_DOC_TYPES
+    params["return_document_types"] = RETURN_DOC_TYPES
 
     return {
         "select_sql": ",\n".join(select_cols + metric_cols),
+        "extra_join_sql": "\n".join(extra_joins),
         "where_sql": " AND ".join(where_fragments),
         "group_by_sql": ("GROUP BY " + ", ".join(group_cols) if group_cols else ""),
         "params": params,
