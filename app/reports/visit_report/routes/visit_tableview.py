@@ -18,6 +18,17 @@ def visit_tableview(payload: VisitPlanRequest, request: Request, page: int = Que
             LEFT JOIN agent_customers ac ON ac.id = vp.customer_id
             LEFT JOIN tbl_route rt ON rt.id = vp.route_id
             LEFT JOIN salesman s ON s.id = vp.salesman_id
+            LEFT JOIN users sup ON sup.id = s.superwiser_id AND sup.role = 108
+            LEFT JOIN (
+                SELECT DISTINCT ON (salesman_id, DATE(created_at))
+                    salesman_id,
+                    DATE(created_at) AS login_date,
+                    location
+                FROM tbl_salesman_location
+                ORDER BY salesman_id, DATE(created_at), created_at
+            ) tsl
+                ON tsl.salesman_id = vp.salesman_id
+            AND tsl.login_date = DATE(vp.visit_start_time)
             WHERE {ctx['where_sql']}
         """
     count_sql = f"""
@@ -39,6 +50,7 @@ def visit_tableview(payload: VisitPlanRequest, request: Request, page: int = Que
                 rt.route_name AS route_name,
                 s.osa_code AS salesman_code,
                 s.name AS salesman_name,
+                sup.name AS superwiser,
                 TO_CHAR(vp.visit_start_time, 'HH24:MI:SS') AS visit_start_time,
                 TO_CHAR(vp.visit_end_time, 'HH24:MI:SS') AS visit_end_time,
                  COALESCE(
@@ -56,6 +68,10 @@ def visit_tableview(payload: VisitPlanRequest, request: Request, page: int = Que
                         )::text,
                         '-'
                     ) AS idle_time,
+                TO_CHAR(
+                    (tsl.location::jsonb -> 0 ->> 'time')::timestamp,
+                    'HH24:MI:SS'
+                    ) AS login_time,
                 ac.latitude AS customer_latitude,
                 ac.longitude AS customer_longitude,
                 vp.latitude,
