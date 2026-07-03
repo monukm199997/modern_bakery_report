@@ -1,165 +1,314 @@
-from datetime import date, timedelta
-import calendar
-from typing import List, Tuple, Dict
+from typing import Dict, List
+
+from fastapi import HTTPException
 
 from app.reports.sales_comparison_report.schemas.sales_comparison_schema import (
     SalesComparisonRequest,
 )
 
-def get_periods(report_by: str, selected_date: date):
-    if report_by == "day":
-        current_from = selected_date
-        current_to = selected_date
-        previous_from = selected_date - timedelta(days=1)
-        previous_to = selected_date - timedelta(days=1)
 
-    elif report_by == "month":
-        current_from = selected_date.replace(day=1)
-        last_day = calendar.monthrange(selected_date.year, selected_date.month)[1]
-        current_to = selected_date.replace(day=last_day)
-
-        prev_month_anchor = current_from - timedelta(days=1)
-        previous_from = prev_month_anchor.replace(day=1)
-        last_day_prev = calendar.monthrange(
-            prev_month_anchor.year, prev_month_anchor.month
-        )[1]
-        previous_to = prev_month_anchor.replace(day=last_day_prev)
-
-    elif report_by == "year":
-        current_from = date(selected_date.year, 1, 1)
-        current_to = date(selected_date.year, 12, 31)
-        previous_from = date(selected_date.year - 1, 1, 1)
-        previous_to = date(selected_date.year - 1, 12, 31)
-
-    else:
-        raise ValueError("Invalid report_by")
-
-    return current_from, current_to, previous_from, previous_to
+SALES_DOC_SQL = "'ZVCS','YDO','YDI','YSCR','ZSCS','ZFCD','YFCD','YSDR'"
+RETURN_DOC_SQL = "'YRSC','ZRVS'"
 
 
-# ─────────────────────────────────────────────────────────────────
-# QUERY PARTS
-# ─────────────────────────────────────────────────────────────────
-def build_query_parts(
-    payload: SalesComparisonRequest,
-    prev_from: date,
-    current_to: date,
-) -> Tuple[List[str], List[str], Dict]:
-    where_fragments: List[str] = []
-    params: Dict = {}
+DRILL_DOWN_MAP = {
+    "customer": {
+        "select": """
+            ac.osa_code AS customer_code,
+            ac.name AS customer
+        """,
+        "group_by": "ac.osa_code, ac.name",
+    },
+    "item": {
+        "select": """
+            i.code AS item_code,
+            i.name AS item,
+            i.barcode AS barcode,
+            u.name AS uom_name,
+            iu.upc AS upc
+        """,
+        "group_by": "i.code, i.name, u.name, iu.upc, i.barcode",
+        "joins": [
+            "LEFT JOIN uom u ON u.id = sdd.uom",
+            """
+            LEFT JOIN item_uoms iu
+                ON iu.item_id = sdd.item_id
+                AND iu.uom_id = sdd.uom
+                AND iu.status = '1'
+            """,
+        ],
+    },
+    "salesman": {
+        "select": "sm.osa_code AS salesman_code, sm.name AS salesman, sup.name AS supervisor",
+        "group_by": "sm.osa_code, sm.name,sup.name",
+    },
+    "route": {
+        "select": "rt.route_code AS route_code, rt.route_name AS route, sm.osa_code AS salesman_code, sm.name AS salesman",
+        "group_by": "rt.route_code, rt.route_name, sm.osa_code, sm.name",
+    },
+    "supervisor": {
+        "select": "sup.name AS supervisor",
+        "group_by": "sup.name",
+    },
+    "customer_group": {
+        "select": "ac.cust_group AS customer_group",
+        "group_by": "ac.cust_group",
+    },
+    "channel": {
+        "select": "oc.outlet_channel_code AS channel_code, oc.outlet_channel AS channel",
+        "group_by": "oc.outlet_channel_code, oc.outlet_channel",
+    },
+}
 
-    where_fragments.append("ih.invoice_date BETWEEN :prev_from AND :current_to")
-    params["prev_from"] = prev_from
-    params["current_to"] = current_to
+
+BASE_FROM_SQL = """
+FROM sales_documents_header sdh
+JOIN sales_documents_detail sdd
+    ON sdd.header_id = sdh.id
+LEFT JOIN salesman sm
+    ON sm.id = sdh.salesman_id
+LEFT JOIN users sup
+    ON sup.id = sm.superwiser_id
+    AND sup.role = 108
+LEFT JOIN items i
+    ON i.id = sdd.item_id
+LEFT JOIN agent_customers ac
+    ON ac.id = sdh.customer_id
+LEFT JOIN outlet_channel oc
+    ON oc.id = ac.outlet_channel_id
+LEFT JOIN tbl_route rt
+    ON rt.id = sdh.route_id
+"""
+
+
+def sales_amount_expr(date_condition: str) -> str:
+    return f"""
+    COALESCE(
+        SUM(
+            CASE
+                WHEN {date_condition}
+                AND TRIM(UPPER(sdh.document_type)) IN ({SALES_DOC_SQL})
+                THEN sdd.net_total
+                ELSE 0
+            END
+        ),
+        0
+    )
+    """
+
+
+def return_amount_expr(date_condition: str) -> str:
+    return f"""
+    COALESCE(
+        SUM(
+            CASE
+                WHEN {date_condition}
+                AND TRIM(UPPER(sdh.document_type)) IN ({RETURN_DOC_SQL})
+                THEN sdd.net_total
+                ELSE 0
+            END
+        ),
+        0
+    )
+    """
+
+
+def net_amount_expr(date_condition: str) -> str:
+    return f"(({sales_amount_expr(date_condition)}) - ({return_amount_expr(date_condition)}))"
+
+
+def sales_quantity_expr(date_condition: str) -> str:
+    return f"""
+    COALESCE(
+        SUM(
+            CASE
+                WHEN {date_condition}
+                AND TRIM(UPPER(sdh.document_type)) IN ({SALES_DOC_SQL})
+                THEN sdd.quantity
+                ELSE 0
+            END
+        ),
+        0
+    )
+    """
+
+
+def return_quantity_expr(date_condition: str) -> str:
+    return f"""
+    COALESCE(
+        SUM(
+            CASE
+                WHEN {date_condition}
+                AND TRIM(UPPER(sdh.document_type)) IN ({RETURN_DOC_SQL})
+                THEN sdd.quantity
+                ELSE 0
+            END
+        ),
+        0
+    )
+    """
+
+
+def net_quantity_expr(date_condition: str) -> str:
+    return f"(({sales_quantity_expr(date_condition)}) - ({return_quantity_expr(date_condition)}))"
+
+
+def percent_change_expr(current_expr: str, previous_expr: str) -> str:
+    return f"""
+    ROUND(
+        (
+            CASE
+                WHEN COALESCE(({previous_expr}), 0) = 0 THEN
+                    CASE WHEN COALESCE(({current_expr}), 0) > 0 THEN 100 ELSE 0 END
+                ELSE
+                    ((COALESCE(({current_expr}), 0) - COALESCE(({previous_expr}), 0))
+                    / COALESCE(({previous_expr}), 0)) * 100
+            END
+        )::numeric,
+        2
+    )
+    """
+
+
+def build_filters(payload: SalesComparisonRequest):
+    where: List[str] = [
+        "sdh.deleted_at IS NULL",
+        "sdd.deleted_at IS NULL",
+        """
+        (
+            sdh.invoice_date::date BETWEEN :current_from_date AND :current_to_date
+            OR sdh.invoice_date::date BETWEEN :previous_from_date AND :previous_to_date
+        )
+        """,
+    ]
+
+    params: Dict = {
+        "current_from_date": payload.current_from_date,
+        "current_to_date": payload.current_to_date,
+        "previous_from_date": payload.previous_from_date,
+        "previous_to_date": payload.previous_to_date,
+    }
 
     if payload.company_ids:
-        where_fragments.append("s.company_id = ANY(:company_ids)")
+        where.append("sm.company_id = ANY(:company_ids)")
         params["company_ids"] = payload.company_ids
 
     if payload.region_ids:
-        where_fragments.append("rt.region_id = ANY(:region_ids)")
+        where.append("rt.region_id = ANY(:region_ids)")
         params["region_ids"] = payload.region_ids
 
     if payload.route_ids:
-        where_fragments.append("ih.route_id = ANY(:route_ids)")
+        where.append("sdh.route_id = ANY(:route_ids)")
         params["route_ids"] = payload.route_ids
 
     if payload.salesman_ids:
-        where_fragments.append("ih.salesman_id = ANY(:salesman_ids)")
+        where.append("sdh.salesman_id = ANY(:salesman_ids)")
         params["salesman_ids"] = payload.salesman_ids
 
     if payload.customer_groups_ids:
-        where_fragments.append("ac.cust_group = ANY(:customer_groups_ids)")
+        where.append("ac.cust_group = ANY(:customer_groups_ids)")
         params["customer_groups_ids"] = payload.customer_groups_ids
-        
+
     if payload.super_wiser_ids:
-        where_fragments.append("s.superwiser_id = ANY(:super_wiser_ids)")
+        where.append("sup.id = ANY(:super_wiser_ids)")
         params["super_wiser_ids"] = payload.super_wiser_ids
 
-    return where_fragments, params
+    return where, params
 
 
-def value_expressions(search_type: str) -> Tuple[str, str]:
-    current_cond = "ih.invoice_date BETWEEN :current_from AND :current_to"
-    prev_cond = "ih.invoice_date BETWEEN :prev_from AND :prev_to"
+def build_drill_down_parts(drill_down_fields):
+    selected_fields = [f.lower() for f in (drill_down_fields or [])]
 
-    if search_type.lower() == "quantity":
-        def qty(cond: str) -> str:
-            return f"""
-            ROUND(
-                SUM(
-                    CASE
-                        WHEN {cond} AND iu.upc IS NOT NULL
-                        THEN id.quantity::numeric * iu.upc::numeric
-                        ELSE 0
-                    END
-                ),
-                6
-            )
-            """
-        current_expr = qty(current_cond)
-        prev_expr = qty(prev_cond)
-    else:
-        current_expr = f"SUM(CASE WHEN {current_cond} THEN id.item_total ELSE 0 END)"
-        prev_expr    = f"SUM(CASE WHEN {prev_cond}    THEN id.item_total ELSE 0 END)"
+    select_cols: List[str] = []
+    group_cols: List[str] = []
+    extra_joins: List[str] = []
 
-    return current_expr, prev_expr
+    for field in selected_fields:
+        if field not in DRILL_DOWN_MAP:
+            raise HTTPException(status_code=400, detail=f"Invalid drill_down_field: {field}")
 
-def prepare_dashboard_context(
-    payload: SalesComparisonRequest,
-    current_from: date,
-    current_to: date,
-    prev_from: date,
-    prev_to: date,
-) -> Dict:
+        cfg = DRILL_DOWN_MAP[field]
+        select_cols.append(cfg["select"])
+        group_cols.append(cfg["group_by"])
+        extra_joins.extend(cfg.get("joins", []))
 
-    where_fragments, params = build_query_parts(payload, prev_from, current_to)
+    return select_cols, group_cols, list(dict.fromkeys(extra_joins))
 
-    params.update(
-        {
-            "current_from": current_from,
-            "current_to": current_to,
-            "prev_from": prev_from,
-            "prev_to": prev_to,
-        }
-    )
-    current_expr, prev_expr = value_expressions(payload.search_type)
+
+def build_comparison_metric_columns(search_type: str):
+    current_cond = "sdh.invoice_date::date BETWEEN :current_from_date AND :current_to_date"
+    previous_cond = "sdh.invoice_date::date BETWEEN :previous_from_date AND :previous_to_date"
+
+    current_revenue = net_amount_expr(current_cond)
+    previous_revenue = net_amount_expr(previous_cond)
+    current_volume = net_quantity_expr(current_cond)
+    previous_volume = net_quantity_expr(previous_cond)
+
+    metric_cols: List[str] = []
+
+    if search_type in ["amount", "both"]:
+        metric_cols.extend([
+            f"({current_revenue}) AS current_revenue",
+            f"({previous_revenue}) AS previous_revenue",
+            f"(({current_revenue}) - ({previous_revenue})) AS revenue_difference",
+            f"{percent_change_expr(current_revenue, previous_revenue)} AS revenue_growth_percent",
+        ])
+
+    if search_type in ["quantity", "both"]:
+        metric_cols.extend([
+            f"({current_volume}) AS current_volume",
+            f"({previous_volume}) AS previous_volume",
+            f"(({current_volume}) - ({previous_volume})) AS volume_difference",
+            f"{percent_change_expr(current_volume, previous_volume)} AS volume_growth_percent",
+        ])
+
+    if search_type not in ["amount", "quantity", "both"]:
+        raise HTTPException(status_code=400, detail="search_type must be amount, quantity, or both")
+
+    return metric_cols
+
+
+def prepare_comparison_context(payload: SalesComparisonRequest) -> Dict:
+    select_cols, group_cols, extra_joins = build_drill_down_parts(payload.drill_down_fields)
+    metric_cols = build_comparison_metric_columns(payload.search_type)
+    where, params = build_filters(payload)
+
     return {
-        "where_sql": " AND ".join(where_fragments),
+        "select_sql": ",\n".join(select_cols + metric_cols),
+        "from_sql": BASE_FROM_SQL + "\n" + "\n".join(extra_joins),
+        "where_sql": " AND ".join(where),
+        "group_by_sql": "GROUP BY " + ", ".join(group_cols) if group_cols else "",
         "params": params,
-        "current_expr": current_expr,
-        "prev_expr": prev_expr,
     }
 
 
-def compute_comparison(current: float, previous: float) -> Dict[str, float]:
- 
-    current = float(current or 0)
-    previous = float(previous or 0)
-    difference = round(current - previous, 2)
-    if difference == -0.0:
-        difference = 0.0
+def compute_comparison(current_value, previous_value):
+    current_value = float(current_value or 0)
+    previous_value = float(previous_value or 0)
+    difference = current_value - previous_value
 
-    if previous > 0:
-        growth = round(((current - previous) / previous) * 100, 2)
+    if previous_value == 0:
+        growth_percent = 100 if current_value > 0 else 0
     else:
-        growth = 100.0 if current > 0 else 0.0
-
-    if growth == -0.0:
-        growth = 0.0
+        growth_percent = round((difference / previous_value) * 100, 2)
 
     return {
-        "current_sales": round(current, 2),
-        "previous_sales": round(previous, 2),
+        "current": current_value,
+        "previous": previous_value,
         "difference": difference,
-        "growth_percent": growth,
+        "growth_percent": growth_percent,
     }
 
-def format_period_label(report_by: str, period_from, period_to) -> str:
-    if report_by == "day":
-        return f"{period_from:%d %b %Y}" 
-    if report_by == "month":
-        return f"{period_from:%b %Y}"          
-    if report_by == "year":
-        return f"{period_from:%Y}" 
-    return f"{period_from:%b %d, %Y} – {period_to:%b %d, %Y}" 
+
+def pretty_header(name: str) -> str:
+    replacements = {
+        "current_revenue": "Current Revenue",
+        "previous_revenue": "Previous Revenue",
+        "revenue_difference": "Revenue Difference",
+        "revenue_growth_percent": "Revenue Growth %",
+        "current_volume": "Current Volume",
+        "previous_volume": "Previous Volume",
+        "volume_difference": "Volume Difference",
+        "volume_growth_percent": "Volume Growth %",
+    }
+    return replacements.get(name, name.replace("_", " ").title())

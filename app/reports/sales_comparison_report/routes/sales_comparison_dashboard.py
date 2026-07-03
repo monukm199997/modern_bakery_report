@@ -1,334 +1,131 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from datetime import datetime
-from app.reports.customer_sales_report.utils.sql_query_helper import BASE_SQL
+
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.sales_comparison_report.schemas.sales_comparison_schema import (
     SalesComparisonRequest,
 )
 from app.reports.sales_comparison_report.utils.sales_comparison_helper import (
-    get_periods,
-    prepare_dashboard_context,
+    BASE_FROM_SQL,
+    build_comparison_metric_columns,
+    build_filters,
     compute_comparison,
-    format_period_label,
 )
 
-router = APIRouter(tags=["Sales Comparison Report"], dependencies = [Depends(get_current_user)])
 
-TOP_N = 5
+router = APIRouter(tags=["Sales Comparison Report"], dependencies=[Depends(get_current_user)])
+
+TOP_N = 10
+
+
+def _run_group_query(payload: SalesComparisonRequest, db: Session, label_sql: str, group_by_sql: str, order_column: str = "current_revenue"):
+    metric_cols = build_comparison_metric_columns(payload.search_type)
+    where, params = build_filters(payload)
+
+    query = f"""
+        SELECT
+            {label_sql},
+            {", ".join(metric_cols)}
+        {BASE_FROM_SQL}
+        WHERE {" AND ".join(where)}
+        GROUP BY {group_by_sql}
+        ORDER BY {order_column} DESC NULLS LAST
+        LIMIT :top_n
+    """
+
+    rows = db.execute(text(query), {**params, "top_n": TOP_N}).mappings().all()
+    return [dict(row) for row in rows]
+
 
 @router.post("/kpis")
-def kpis(
-    payload: SalesComparisonRequest,
-    db: Session = Depends(get_db),
-):
-    selected_date = payload.selected_date
-    if isinstance(selected_date, str):
-        selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
+def comparison_kpis(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+    metric_cols = build_comparison_metric_columns(payload.search_type)
+    where, params = build_filters(payload)
 
-    current_from, current_to, prev_from, prev_to = get_periods(
-        payload.report_by, selected_date
-    )
-
-    ctx = prepare_dashboard_context(
-        payload, current_from, current_to, prev_from, prev_to
-    )
-    where_sql = ctx["where_sql"]
-    params = ctx["params"]
-    current_expr = ctx["current_expr"]
-    prev_expr = ctx["prev_expr"]
-
-    kpi_sql = f"""
+    query = f"""
         SELECT
-            COALESCE({current_expr}, 0) AS current_sales,
-            COALESCE({prev_expr},    0) AS previous_sales
-        {BASE_SQL}
-        LEFT JOIN tbl_route rt ON rt.id = ih.route_id
-        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-        WHERE {where_sql}
+            {", ".join(metric_cols)}
+        {BASE_FROM_SQL}
+        WHERE {" AND ".join(where)}
     """
-    kpi_row = db.execute(text(kpi_sql), params).first()
-    kpi = compute_comparison(
-        kpi_row._mapping["current_sales"] if kpi_row else 0,
-        kpi_row._mapping["previous_sales"] if kpi_row else 0,
-    )
-    current_label = format_period_label(payload.report_by, current_from, current_to)
-    prev_label = format_period_label(payload.report_by, prev_from, prev_to)
 
-    return {
-        "period": {
-            "current": current_label,
-            "previous": prev_label,
+    row = db.execute(text(query), params).mappings().first() or {}
+
+    response = {
+        "periods": {
+            "current": {"from_date": payload.current_from_date, "to_date": payload.current_to_date},
+            "previous": {"from_date": payload.previous_from_date, "to_date": payload.previous_to_date},
         },
-        "kpi": kpi,
+        "search_type": payload.search_type,
     }
+
+    if payload.search_type in ["amount", "both"]:
+        response["revenue"] = compute_comparison(
+            row.get("current_revenue"),
+            row.get("previous_revenue"),
+        )
+
+    if payload.search_type in ["quantity", "both"]:
+        response["volume"] = compute_comparison(
+            row.get("current_volume"),
+            row.get("previous_volume"),
+        )
+
+    return response
+
+
+@router.post("/top-customers")
+def top_customers(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+    rows = _run_group_query(
+        payload,
+        db,
+        "ac.osa_code AS customer_code, ac.name AS customer",
+        "ac.osa_code, ac.name",
+    )
+    return {"top_customers": rows}
+
 
 @router.post("/top-items")
-def top_items(payload: SalesComparisonRequest, db:Session = Depends(get_db)):
-
-    selected_date = payload.selected_date
-    if isinstance(selected_date, str):
-        selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
-
-    current_from, current_to, prev_from, prev_to = get_periods(
-        payload.report_by, selected_date
+def top_items(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+    rows = _run_group_query(
+        payload,
+        db,
+        "i.code AS item_code, i.name AS item",
+        "i.code, i.name",
     )
+    return {"top_items": rows}
 
-    ctx = prepare_dashboard_context(
-        payload, current_from, current_to, prev_from, prev_to
+
+@router.post("/top-salesmen")
+def top_salesmen(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+    rows = _run_group_query(
+        payload,
+        db,
+        "sm.osa_code AS salesman_code, sm.name AS salesman",
+        "sm.osa_code, sm.name",
     )
-    where_sql = ctx["where_sql"]
-    params = ctx["params"]
-    current_expr = ctx["current_expr"]
-    prev_expr = ctx["prev_expr"]
+    return {"top_salesmen": rows}
 
-    top_items_sql = f"""
-        SELECT
-            i.name AS item,
-            COALESCE({current_expr}, 0) AS current_sales,
-            COALESCE({prev_expr},    0) AS previous_sales
-        {BASE_SQL}
-        LEFT JOIN tbl_route rt ON rt.id = ih.route_id
-        LEFT JOIN items i ON i.id = id.item_id
-        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-        WHERE {where_sql}
-        GROUP BY i.name
-        ORDER BY current_sales DESC NULLS LAST
-        LIMIT :top_n
-    """
-    rows = db.execute(text(top_items_sql), {**params, "top_n": TOP_N})
-    top_items = [
-        {
-            "item": r._mapping["item"],
-            **compute_comparison(r._mapping["current_sales"], r._mapping["previous_sales"]),
-        }
-        for r in rows
-    ]
-    current_label = format_period_label(payload.report_by, current_from, current_to)
-    prev_label = format_period_label(payload.report_by, prev_from, prev_to)
-
-    return  {
-        "period": {
-            "current": current_label,
-            "previous": prev_label,
-        },
-        "top_items": top_items,
-    }
-
-@router.post("/top-categories")
-def top_categories(payload:SalesComparisonRequest, db:Session = Depends(get_db)):
-
-    selected_date = payload.selected_date
-    if isinstance(selected_date, str):
-        selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
-
-    current_from, current_to, prev_from, prev_to = get_periods(
-        payload.report_by, selected_date
-    )
-    ctx = prepare_dashboard_context(
-        payload, current_from, current_to, prev_from, prev_to
-    )
-    where_sql = ctx["where_sql"]
-    params = ctx["params"]
-    current_expr = ctx["current_expr"]
-    prev_expr = ctx["prev_expr"]
-
-    top_categories_sql = f"""
-        SELECT
-            ic.category_name AS category,
-            COALESCE({current_expr}, 0) AS current_sales,
-            COALESCE({prev_expr},    0) AS previous_sales
-        {BASE_SQL}
-        LEFT JOIN tbl_route rt ON rt.id = ih.route_id
-        LEFT JOIN items i ON i.id = id.item_id
-        LEFT JOIN item_categories ic ON ic.id = i.category_id
-        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-        WHERE {where_sql}
-        GROUP BY ic.category_name
-        ORDER BY current_sales DESC NULLS LAST
-        LIMIT :top_n
-    """
-    rows = db.execute(text(top_categories_sql), {**params, "top_n": TOP_N})
-    top_categories = [
-        {
-            "category": r._mapping["category"],
-            **compute_comparison(r._mapping["current_sales"], r._mapping["previous_sales"]),
-        }
-       
-        for r in rows
-    ]
-    current_label = format_period_label(payload.report_by, current_from, current_to)
-    prev_label = format_period_label(payload.report_by, prev_from, prev_to)
-
-    return {
-        "period": {
-            "current": current_label,
-            "previous": prev_label,
-        },
-        "top_categories": top_categories,
-    }
-
-@router.post("/top-salesman")
-def top_salesman(payload: SalesComparisonRequest, db:Session = Depends(get_db)):
-
-    selected_date = payload.selected_date
-    if isinstance(selected_date, str):
-        selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
-
-    current_from, current_to, prev_from, prev_to = get_periods(
-        payload.report_by, selected_date
-    )
-
-    ctx = prepare_dashboard_context(
-        payload, current_from, current_to, prev_from, prev_to
-    )
-    where_sql = ctx["where_sql"]
-    params = ctx["params"]
-    current_expr = ctx["current_expr"]
-    prev_expr = ctx["prev_expr"]
-
-    top_salesmen_sql = f"""
-        SELECT
-            s.osa_code || '-' || s.name AS salesman,
-            COALESCE({current_expr}, 0) AS current_sales,
-            COALESCE({prev_expr},    0) AS previous_sales
-        {BASE_SQL}
-        LEFT JOIN tbl_route rt ON rt.id = ih.route_id
-        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-        WHERE {where_sql}
-        GROUP BY s.osa_code, s.name
-        ORDER BY current_sales DESC NULLS LAST
-        LIMIT :top_n
-    """
-    rows = db.execute(text(top_salesmen_sql), {**params, "top_n": TOP_N})
-    top_salesman = [
-        {
-            "salesman": r._mapping["salesman"],
-            **compute_comparison(r._mapping["current_sales"], r._mapping["previous_sales"]),
-        }
-        for r in rows
-    ]
-    current_label = format_period_label(payload.report_by, current_from, current_to)
-    prev_label = format_period_label(payload.report_by, prev_from, prev_to)
-
-    return  {
-        "period": {
-            "current": current_label,
-            "previous": prev_label,
-        },
-        "top_salesmen": top_salesman,
-    }
 
 @router.post("/top-routes")
-def top_routes(payload:SalesComparisonRequest, db:Session = Depends(get_db)):
-
-    selected_date = payload.selected_date
-    if isinstance(selected_date, str):
-        selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
-
-    current_from, current_to, prev_from, prev_to = get_periods(
-        payload.report_by, selected_date
+def top_routes(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+    rows = _run_group_query(
+        payload,
+        db,
+        "rt.route_code AS route_code, rt.route_name AS route",
+        "rt.route_code, rt.route_name",
     )
+    return {"top_routes": rows}
 
-    ctx = prepare_dashboard_context(
-        payload, current_from, current_to, prev_from, prev_to
+
+@router.post("/top-customer-groups")
+def top_customer_groups(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+    rows = _run_group_query(
+        payload,
+        db,
+        "ac.cust_group AS customer_group",
+        "ac.cust_group",
     )
-    where_sql = ctx["where_sql"]
-    params = ctx["params"]
-    current_expr = ctx["current_expr"]
-    prev_expr = ctx["prev_expr"]
-
-    top_routes_sql = f"""
-        SELECT
-            rt.route_name AS route,
-            COALESCE({current_expr}, 0) AS current_sales,
-            COALESCE({prev_expr},    0) AS previous_sales
-        {BASE_SQL}
-        LEFT JOIN tbl_route rt ON rt.id = ih.route_id
-        LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-        WHERE {where_sql}
-        GROUP BY rt.route_name
-        ORDER BY current_sales DESC NULLS LAST
-        LIMIT :top_n
-    """
-    rows = db.execute(text(top_routes_sql), {**params, "top_n": TOP_N})
-    top_routes = [
-        {
-            "route": r._mapping["route"],
-            **compute_comparison(r._mapping["current_sales"], r._mapping["previous_sales"]),
-        }
-        for r in rows
-    ]
-    current_label = format_period_label(payload.report_by, current_from, current_to)
-    prev_label = format_period_label(payload.report_by, prev_from, prev_to)
-
-    return {
-        "period": {
-            "current": current_label,
-            "previous": prev_label,
-        },
-        "top_routes": top_routes,
-    }
-
-@router.post("/trenline")
-def trend_line(payload:SalesComparisonRequest, db:Session = Depends(get_db)):
-
-    selected_date = payload.selected_date
-    if isinstance(selected_date, str):
-        selected_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
-
-    current_from, current_to, prev_from, prev_to = get_periods(
-        payload.report_by, selected_date
-    )
-
-    ctx = prepare_dashboard_context(
-        payload, current_from, current_to, prev_from, prev_to
-    )
-    where_sql = ctx["where_sql"]
-    params = ctx["params"]
-    current_expr = ctx["current_expr"]
-    prev_expr = ctx["prev_expr"]
-    
-    if payload.report_by == "month":
-        bucket_expr = "EXTRACT(DAY FROM ih.invoice_date)::int"
-        bucket_label_expr = "TO_CHAR(ih.invoice_date, 'DD')"
-    elif payload.report_by == "year":
-        bucket_expr = "EXTRACT(MONTH FROM ih.invoice_date)::int"
-        bucket_label_expr = "TO_CHAR(ih.invoice_date, 'Mon')"
-    else:  
-        bucket_expr = "EXTRACT(EPOCH FROM ih.invoice_date)::bigint"
-        bucket_label_expr = "TO_CHAR(ih.invoice_date, 'DD Mon YYYY')"
-
-    trend_sql = f"""
-        SELECT
-            {bucket_expr} AS bucket_key,
-            MIN({bucket_label_expr}) AS bucket_label,
-            COALESCE({current_expr}, 0) AS current_sales,
-            COALESCE({prev_expr},    0) AS previous_sales
-       {BASE_SQL}
-       LEFT JOIN tbl_route rt ON rt.id = ih.route_id
-       LEFT JOIN agent_customers ac ON ac.id = ih.customer_id
-        WHERE {where_sql}
-        GROUP BY bucket_key
-        ORDER BY bucket_key
-    """
-    trend = [
-        {
-            "bucket": r._mapping["bucket_label"],
-            **compute_comparison(r._mapping["current_sales"], r._mapping["previous_sales"]),
-        }
-        for r in db.execute(text(trend_sql), params)
-    ]
-
-    current_label = format_period_label(payload.report_by, current_from, current_to)
-    prev_label = format_period_label(payload.report_by, prev_from, prev_to)
-
-    return {
-        "period": {
-            "current": current_label,
-            "previous": prev_label,
-        },
-        "trend": trend,
-    }
+    return {"top_customer_groups": rows}
