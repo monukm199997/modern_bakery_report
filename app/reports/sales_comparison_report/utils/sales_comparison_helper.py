@@ -54,6 +54,22 @@ DRILL_DOWN_MAP = {
         "select": "ac.cust_group AS customer_group",
         "group_by": "ac.cust_group",
     },
+    "customer_group_1": {
+        "select": """
+            ac."CustomerGroupDesc" AS customer_group_1
+        """,
+        "group_by": """
+                ac."CustomerGroupDesc"
+                """,
+    },
+    "customer_group_2": {
+         "select": """
+            ac."CustomerGroupDesc2" AS customer_group_2
+        """,
+        "group_by": """
+                ac."CustomerGroupDesc2"
+                """,
+    },
     "channel": {
         "select": "oc.outlet_channel_code AS channel_code, oc.outlet_channel AS channel",
         "group_by": "oc.outlet_channel_code, oc.outlet_channel",
@@ -204,14 +220,22 @@ def build_filters(payload: SalesComparisonRequest):
     if payload.salesman_ids:
         where.append("sdh.salesman_id = ANY(:salesman_ids)")
         params["salesman_ids"] = payload.salesman_ids
+    
+    if payload.super_wiser_ids:
+        where.append("sup.id = ANY(:super_wiser_ids)")
+        params["super_wiser_ids"] = payload.super_wiser_ids
 
     if payload.customer_groups_ids:
         where.append("ac.cust_group = ANY(:customer_groups_ids)")
         params["customer_groups_ids"] = payload.customer_groups_ids
 
-    if payload.super_wiser_ids:
-        where.append("sup.id = ANY(:super_wiser_ids)")
-        params["super_wiser_ids"] = payload.super_wiser_ids
+    if payload.customer_groups_1_ids:
+        where.append("ac.customergroup = ANY(CAST(:customer_groups_1_ids AS text[]))")
+        params["customer_groups_1_ids"] = payload.customer_groups_1_ids
+
+    if payload.customer_groups_2_ids:
+        where.append("ac.customergroup2 = ANY(CAST(:customer_groups_2_ids AS text[]))")
+        params["customer_groups_2_ids"] = payload.customer_groups_2_ids
 
     return where, params
 

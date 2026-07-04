@@ -10,18 +10,17 @@ class SalesComparisonRequest(BaseModel):
     previous_from_date: date
     previous_to_date: date
 
-    # amount = revenue, quantity = volume, both = revenue + volume
-    search_type: Literal["amount", "quantity", "both"] = "amount"
-
-    # allowed: customer, item, salesman, route, supervisor, customer_group, channel
+    search_type: Literal["amount", "quantity", "both"] = "both"
     drill_down_fields: Optional[List[str]] = None
-
     company_ids: Optional[List[int]] = None
     region_ids: Optional[List[int]] = None
     route_ids: Optional[List[int]] = None
     salesman_ids: Optional[List[int]] = None
-    customer_groups_ids: Optional[List[int]] = None
     super_wiser_ids: Optional[List[int]] = None
+    customer_groups_ids: Optional[List[int]] = None
+    customer_groups_1_ids: Optional[List[str]] = None
+    customer_groups_2_ids: Optional[List[str]] = None
+   
 
     @model_validator(mode="after")
     def validate_dates(self):
