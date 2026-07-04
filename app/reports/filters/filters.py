@@ -279,6 +279,22 @@ def get_customer(
     result = [dict(r._mapping) for r in rows]
     return result
 
+@router.get("/super_wiser")
+def get_super_wiser(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = """
+        SELECT
+            id,
+            name
+        FROM users 
+        WHERE role = 108
+        ORDER BY name
+    """
+    rows = db.execute(text(query)).fetchall()
+    return [dict(r._mapping) for r in rows]
+
 @router.get("/customer_group")
 def get_customer_group(
     customer_ids: Optional[str] = Query(None),
@@ -311,18 +327,62 @@ def get_customer_group(
     return [dict(r._mapping) for r in rows]
 
 
-@router.get("/super_wiser")
-def get_super_wiser(
+@router.get("/customer_group_1")
+def get_customer_group_1(
+    customer_ids: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    if customer_ids:
+        customer_id_list = [int(x.strip()) for x in customer_ids.split(",")]
+        query = """
+            SELECT
+                id,
+                customergroup,
+                "CustomerGroupDesc"
+            FROM agent_customers
+            WHERE id = ANY(:customer_ids)
+            ORDER BY customergroup
+        """
+        rows = db.execute(text(query),{"customer_ids": customer_id_list}).fetchall()
+        return [dict(r._mapping) for r in rows]
+
     query = """
-        SELECT
-            id,
-            name
-        FROM users 
-        WHERE role = 108
-        ORDER BY name
+        SELECT DISTINCT
+            customergroup,
+            "CustomerGroupDesc"
+        FROM agent_customers
+        ORDER BY "CustomerGroupDesc", customergroup
+    """
+    rows = db.execute(text(query)).fetchall()
+    return [dict(r._mapping) for r in rows]
+
+@router.get("/customer_group_2")
+def get_customer_group_2(
+    customer_ids: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if customer_ids:
+        customer_id_list = [int(x.strip()) for x in customer_ids.split(",")]
+        query = """
+            SELECT
+                id,
+                customergroup2,
+                "CustomerGroupDesc2"
+            FROM agent_customers
+            WHERE id = ANY(:customer_ids)
+            ORDER BY customergroup2
+        """
+        rows = db.execute(text(query),{"customer_ids": customer_id_list}).fetchall()
+        return [dict(r._mapping) for r in rows]
+
+    query = """
+        SELECT DISTINCT
+            customergroup2,
+            "CustomerGroupDesc2"
+        FROM agent_customers
+        ORDER BY "CustomerGroupDesc2", customergroup2
     """
     rows = db.execute(text(query)).fetchall()
     return [dict(r._mapping) for r in rows]
