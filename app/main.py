@@ -45,6 +45,8 @@ from app.reports.sales_new_report.routes.sales_pivote_export import router as sa
 from app.reports.vehicles_permit_report.routes.vehicles_permit_tableview import router as vehicles_permit_tableview
 from app.reports.vehicles_permit_report.routes.vehicles_permit_export import router as vehicles_permit_export
 
+from app.reports.item_loading_report.routes.item_loading_tableview import router as item_loading_tableview
+from app.reports.item_loading_report.routes.item_loading_export import router as item_loading_export
 
 app = FastAPI(title="Modern Bakery Reports API")
 
@@ -92,6 +94,9 @@ app.include_router(sales_pivote_export, prefix="/api/sales-new-report")
 
 app.include_router(vehicles_permit_tableview, prefix="/api/vehicles_permit_report")
 app.include_router(vehicles_permit_export, prefix="/api/vehicles_permit_report")
+
+app.include_router(item_loading_tableview, prefix="/api/item-loading-report")
+app.include_router(item_loading_export, prefix="/api/item-loading-report")
 
 
 app.add_middleware(
