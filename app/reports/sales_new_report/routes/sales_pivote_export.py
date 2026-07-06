@@ -210,9 +210,8 @@ def build_sales_pivot_excel(rows, period, search_type):
                 if cell.value is not None:
                     max_length = max(max_length, len(str(cell.value)))
             ws.column_dimensions[col_letter].width = max_length + 4
-        ws.freeze_panes = f"{get_column_letter(n_lead + 1)}2"
+        ws.freeze_panes = "A2"
 
-    # write each requested metric to its own sheet
     for i, (title, value_col, num_fmt) in enumerate(sheet_specs):
         ws = wb.active if i == 0 else wb.create_sheet()
         ws.title = title
