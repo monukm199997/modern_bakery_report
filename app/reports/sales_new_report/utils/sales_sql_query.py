@@ -46,6 +46,22 @@ DRILL_DOWN_MAP = {
         "select": "ac.cust_group AS customer_group",
         "group_by": "ac.cust_group",
     },
+    "customer_group_1": {
+        "select": """
+            ac."CustomerGroupDesc" AS customer_group_1
+        """,
+        "group_by": """
+                ac."CustomerGroupDesc"
+                """,
+    },
+    "customer_group_2": {
+         "select": """
+            ac."CustomerGroupDesc2" AS customer_group_2
+        """,
+        "group_by": """
+                ac."CustomerGroupDesc2"
+                """,
+    },
     "channel": {
         "select": """
         oc.outlet_channel_code AS channel_code,
@@ -244,3 +260,44 @@ VOLUME_NET_SALES = f"""
                 {TOTAL_RETURN_VOLUME}
             ) AS volume_net_sales
             """
+#-------------------------------------------------------------------------------
+PERIOD_MAP = {
+    "day": {
+        "select":   "TO_CHAR(sdh.invoice_date, 'YYYY-MM-DD') AS period",
+        "group_by": "TO_CHAR(sdh.invoice_date, 'YYYY-MM-DD')",
+        "order_by": "TO_CHAR(sdh.invoice_date, 'YYYY-MM-DD')",
+    },
+    "month": {
+        "select":   "TO_CHAR(sdh.invoice_date, 'YYYY-MM') AS period",
+        "group_by": "TO_CHAR(sdh.invoice_date, 'YYYY-MM')",
+        "order_by": "TO_CHAR(sdh.invoice_date, 'YYYY-MM')",
+    },
+    "year": {
+        "select":   "TO_CHAR(sdh.invoice_date, 'YYYY') AS period",
+        "group_by": "TO_CHAR(sdh.invoice_date, 'YYYY')",
+        "order_by": "TO_CHAR(sdh.invoice_date, 'YYYY')",
+    },
+}
+
+
+PIVOT_PERIOD_START_MAP = {
+    "day":   "sdh.invoice_date::date",
+    "month": "date_trunc('month', sdh.invoice_date)::date",
+    "year":  "date_trunc('year',  sdh.invoice_date)::date",
+}
+
+
+PIVOT_NET_AMOUNT = f"""
+    (
+        COALESCE(SUM(CASE WHEN sdh.document_type IN ({SALES_DOC_TYPES})  THEN {SALES_REVENUE} ELSE 0 END), 0)
+      - COALESCE(SUM(CASE WHEN sdh.document_type IN ({RETURN_DOC_TYPES}) THEN {SALES_REVENUE} ELSE 0 END), 0)
+    ) AS net_amount
+"""
+
+PIVOT_NET_QUANTITY = f"""
+    (
+        COALESCE(SUM(CASE WHEN sdh.document_type IN ({SALES_DOC_TYPES})  THEN {SALES_VOLUME} ELSE 0 END), 0)
+      - COALESCE(SUM(CASE WHEN sdh.document_type IN ({RETURN_DOC_TYPES}) THEN {SALES_VOLUME} ELSE 0 END), 0)
+    ) AS net_quantity
+"""
+ 

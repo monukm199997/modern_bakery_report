@@ -13,8 +13,25 @@ from app.reports.sales_new_report.utils.sales_sql_query import (
     VOLUME_GROSS_RETURN,
     VOLUME_RETURN_PERCENT,
     VOLUME_NET_SALES,
+    PIVOT_PERIOD_START_MAP,
+    PIVOT_NET_AMOUNT,
+    PIVOT_NET_QUANTITY,
+    PERIOD_MAP,
 )
 
+
+def item_drilldown_joins(selected_fields):
+    if "item" not in selected_fields:
+        return []
+    return [
+        "LEFT JOIN uom u ON u.id = sdd.uom",
+        """
+        LEFT JOIN item_uoms iu
+            ON iu.item_id = sdd.item_id
+            AND iu.uom_id = sdd.uom
+            AND iu.status = '1'
+        """,
+    ]
 
 def build_sales_document_filters(payload: SalesReportRequest):
     where = []
@@ -62,7 +79,15 @@ def build_sales_document_filters(payload: SalesReportRequest):
     if payload.customer_groups_ids:
         where.append("ac.cust_group = ANY(:customer_groups_ids)")
         params["customer_groups_ids"] = payload.customer_groups_ids
+        
+    if payload.customer_groups_1_ids:
+        where.append("ac.customergroup = ANY(CAST(:customer_groups_1_ids AS text[]))")
+        params["customer_groups_1_ids"] = payload.customer_groups_1_ids
 
+    if payload.customer_groups_2_ids:
+        where.append("ac.customergroup2 = ANY(CAST(:customer_groups_2_ids AS text[]))")
+        params["customer_groups_2_ids"] = payload.customer_groups_2_ids
+        
     if payload.super_wiser_ids:
         where.append("sup.id = ANY(:super_wiser_ids)")
         params["super_wiser_ids"] = payload.super_wiser_ids
@@ -142,6 +167,115 @@ def prepare_sales_report_context(payload: SalesReportRequest):
         "params": params,
     }
 
+def prepare_sales_period_context(payload):
+    validate_mandatory(payload)
+
+    period = payload.period.lower()
+    if period not in PERIOD_MAP:
+        raise HTTPException(status_code=400, detail="period must be day, month, or year",)
+
+    period_cfg = PERIOD_MAP[period]
+
+    select_cols = []
+    group_cols = []
+    order_cols = []
+    extra_joins = []
+
+    selected_fields = [f.lower() for f in (payload.drill_down_fields or [])]
+
+    extra_joins.extend(item_drilldown_joins(selected_fields))
+
+    for field in selected_fields:
+        if field not in DRILL_DOWN_MAP:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid drill_down_field: {field}",
+            )
+        config = DRILL_DOWN_MAP[field]
+        select_cols.append(config["select"])
+        group_cols.append(config["group_by"])
+        order_cols.append(config["group_by"])
+
+    select_cols.append(period_cfg["select"])
+    group_cols.append(period_cfg["group_by"])
+    order_cols.append(period_cfg["order_by"])
+
+    search_type = payload.search_type.lower()
+
+    metric_cols = []
+    if search_type in ["amount", "both"]:
+        metric_cols.extend([
+            REVENUE_GROSS_SALES,
+            REVENUE_GROSS_RETURN,
+            REVENUE_RETURN_PERCENT,
+            REVENUE_NET_SALES,
+        ])
+    if search_type in ["quantity", "both"]:
+        metric_cols.extend([
+            VOLUME_GROSS_SALES,
+            VOLUME_GROSS_RETURN,
+            VOLUME_RETURN_PERCENT,
+            VOLUME_NET_SALES,
+        ])
+
+    where_fragments, params = build_sales_document_filters(payload)
+
+    return {
+        "select_sql": ",\n".join(select_cols + metric_cols),
+        "extra_join_sql": "\n".join(extra_joins),
+        "where_sql": " AND ".join(where_fragments),
+        "group_by_sql": "GROUP BY " + ", ".join(group_cols),
+        "order_by_sql": "ORDER BY " + ", ".join(order_cols),
+        "params": params,
+    }
 
 
+def prepare_sales_pivot_context(payload):
+    validate_mandatory(payload)
+ 
+    period = payload.period.lower()
+    if period not in PIVOT_PERIOD_START_MAP:
+        raise HTTPException(status_code=400, detail="period must be day, month, or year",)
+ 
+    search_type = payload.search_type.lower()
+    if search_type not in ("amount", "quantity", "both"):
+        raise HTTPException(
+            status_code=400,
+            detail="search_type must be amount, quantity, or both",
+        )
+ 
+    select_cols = []
+    group_cols = []
+    order_cols = []
+    extra_joins = []
+ 
+    selected_fields = [f.lower() for f in (payload.drill_down_fields or [])]
+ 
+    extra_joins.extend(item_drilldown_joins(selected_fields))
+ 
+    for field in selected_fields:
+        if field not in DRILL_DOWN_MAP:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid drill_down_field: {field}",
+            )
+        config = DRILL_DOWN_MAP[field]
+        select_cols.append(config["select"])
+        group_cols.append(config["group_by"])
+        order_cols.append(config["group_by"])
 
+    period_start_sql = PIVOT_PERIOD_START_MAP[period]
+    select_cols.append(f"{period_start_sql} AS period_start")
+    group_cols.append(period_start_sql)
+    order_cols.append(period_start_sql)
+ 
+    where_fragments, params = build_sales_document_filters(payload)
+ 
+    return {
+        "select_sql": ",\n".join(select_cols + [PIVOT_NET_AMOUNT, PIVOT_NET_QUANTITY]),
+        "extra_join_sql": "\n".join(extra_joins),
+        "where_sql": " AND ".join(where_fragments),
+        "group_by_sql": "GROUP BY " + ", ".join(group_cols),
+        "order_by_sql": "ORDER BY " + ", ".join(order_cols),
+        "params": params,
+    }
