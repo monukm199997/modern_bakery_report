@@ -2,23 +2,35 @@ import openpyxl
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app.core.database import get_db
 from tempfile import NamedTemporaryFile
 from fastapi.responses import FileResponse
-from app.dependencies.auth import get_current_user
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
+
+from app.core.database import get_db
+from app.dependencies.auth import get_current_user
 from app.reports.item_loading_report.schemas.item_loading_schema import ItemLoadingRequest
 from app.reports.item_loading_report.utils.item_loading_helper import prepare_dashboard_context
+from app.reports.item_loading_report.utils.item_loading_sql_query_helper import (
+    ORDER_DATA_JOIN,
+    RECIEVE_DATA_JOIN,
+    FINAL_SELECT,
+    
+)
 
 router = APIRouter(tags=["Item Loading Report"], dependencies=[Depends(get_current_user)])
 
 HEADER_FILL = PatternFill(
-    start_color="993442",
-    end_color="993442",
+    start_color="903442",
+    end_color="903442",
     fill_type="solid"
 )
 
 HEADER_FONT = Font(
+    color="FFFFFF",
+    bold=True
+)
+
+TOTAL_FONT = Font(
     color="FFFFFF",
     bold=True
 )
@@ -31,122 +43,146 @@ BORDER = Border(
 )
 
 CENTER = Alignment(horizontal="center", vertical="center")
+RIGHT = Alignment(horizontal="right", vertical="center")
+
+
+def pretty_header(header: str) -> str:
+    return header.replace("_", " ").title()
+
+def to_float(value):
+    try:
+        return float(value or 0)
+    except Exception:
+        return 0
+
 
 @router.post("/item-loading-export")
-def item_loading_export(payload: ItemLoadingRequest, db: Session = Depends(get_db)):
+def item_loading_export(
+    payload: ItemLoadingRequest,
+    db: Session = Depends(get_db)
+):
     ctx = prepare_dashboard_context(payload)
 
     query = f"""
         WITH ordered_data AS (
             SELECT
-                aoh.salesman_id,
-                {ctx['order_value']} AS ordered_qty,
+                aoh.salesman_id
+                {ctx["order_select_sql"]},
+                {ctx["order_value"]} AS ordered_qty,
                 MAX(aoh.comment) AS remarks_by_stores
-            FROM agent_order_headers aoh
-            LEFT JOIN agent_order_details aod
-                ON aod.header_id = aoh.id
-                AND aod.deleted_at IS NULL
-            JOIN agent_customers ac
-                ON ac.id = aoh.customer_id
-                AND ac.is_driver = 1
-            LEFT JOIN salesman s
-                ON s.id = aoh.salesman_id
-            LEFT JOIN tbl_route rt
-                ON rt.id = aoh.route_id
-            LEFT JOIN item_uoms iu
-                ON iu.item_id = aod.item_id
-                AND iu.uom_id = aod.uom_id
-            WHERE {ctx['order_where_sql']}
-            GROUP BY aoh.salesman_id
+            FROM {ORDER_DATA_JOIN}
+            {ctx["order_join_sql"]}
+            WHERE {ctx["order_where_sql"]}
+            GROUP BY {ctx["order_group_sql"]}
         ),
-
         received_data AS (
             SELECT
-                lh.salesman_id,
-                {ctx['load_volue']} AS received_qty
-            FROM tbl_load_header lh
-            LEFT JOIN tbl_load_details ld
-                ON ld.header_id = lh.id
-                AND ld.deleted_at IS NULL
-            LEFT JOIN salesman s2
-                ON s2.id = lh.salesman_id
-            LEFT JOIN tbl_route rt2
-                ON rt2.id = lh.route_id
-            LEFT JOIN item_uoms iu
-                ON iu.item_id = ld.item_id
-                AND iu.uom_id = ld.uom
+                lh.salesman_id
+                {ctx["receive_select_sql"]},
+                {ctx["load_volue"]} AS received_qty
+            FROM {RECIEVE_DATA_JOIN}
+            {ctx["receive_join_sql"]}
             WHERE {ctx["receive_where_sql"]}
-            GROUP BY lh.salesman_id
+            GROUP BY {ctx["receive_group_sql"]}
         )
-
         SELECT
-            s.id AS salesman_id,
-            s.osa_code AS salesman_code,
-            s.name AS salesman_name,
-            COALESCE(o.ordered_qty, 0) AS salesman_ordered_qty,
-            COALESCE(r.received_qty, 0) AS received_qty,
-            COALESCE(o.ordered_qty, 0) - COALESCE(r.received_qty, 0) AS diff,
-            o.remarks_by_stores
+            s.id AS salesman_id
+            {ctx["final_select_sql"]},
+            {FINAL_SELECT}
         FROM ordered_data o
-        LEFT JOIN received_data r
-            ON r.salesman_id = o.salesman_id
-        LEFT JOIN salesman s
-            ON s.id = o.salesman_id
+        LEFT JOIN received_data r ON {ctx["join_condition_sql"]}
+        LEFT JOIN salesman s ON s.id = o.salesman_id
         ORDER BY
-            s.osa_code,
-            s.name;
+            s.id
     """
 
-    rows = db.execute(text(query), ctx["params"]).mappings().all()
+    rows = [
+        dict(row)
+        for row in db.execute(text(query), ctx["params"]).mappings().all()
+    ]
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Item Loading Report"
 
-    headers = [
-        "Salesman Code",
-        "Sales Team",
-        "Ordered QTY",
-        "Received Qty",
-        "Diff",
-        "Remarks by Stores",
-    ]
+    if not rows:
+        ws.append(["No Data Found"])
+        ws["A1"].fill = HEADER_FILL
+        ws["A1"].font = HEADER_FONT
+        ws["A1"].border = BORDER
+        ws["A1"].alignment = CENTER
+    else:
+        headers = list(rows[0].keys())
 
-    ws.append(headers)
+        if "salesman_id" in headers:
+            headers.remove("salesman_id")
 
-    for cell in ws[1]:
-        cell.fill = HEADER_FILL
-        cell.font = HEADER_FONT
-        cell.border = BORDER
-        cell.alignment = CENTER
+        ws.append([pretty_header(header) for header in headers])
 
-    for row in rows:
-        ws.append([
-            row.salesman_code,
-            row.salesman_name,
-            row.salesman_ordered_qty,
-            row.received_qty,
-            row.diff,
-            row.remarks_by_stores,
-           
-        ])
-
-    for row in ws.iter_rows(min_row=2):
-        for cell in row:
+        for cell in ws[1]:
+            cell.fill = HEADER_FILL
+            cell.font = HEADER_FONT
             cell.border = BORDER
+            cell.alignment = CENTER
 
-    for column in ws.columns:
-        max_length = 0
-        column_letter = column[0].column_letter
+        for row in rows:
+            ws.append([row.get(header) for header in headers])
 
-        for cell in column:
-            try:
-                if cell.value:
+        numeric_headers = {
+            "salesman_ordered_qty",
+            "received_qty",
+            "diff",
+            "upc",
+        }
+
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.border = BORDER
+
+                header = headers[cell.column - 1]
+
+                if header in numeric_headers:
+                    cell.alignment = RIGHT
+                    cell.number_format = "#,##0.000"
+
+                    if isinstance(cell.value, (int, float)) and cell.value < 0:
+                        cell.font = Font(color="FF0000")
+
+        total_row = ws.max_row + 1
+
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=total_row, column=col_idx)
+            cell.fill = HEADER_FILL
+            cell.font = TOTAL_FONT
+            cell.border = BORDER
+            cell.alignment = CENTER
+
+            if col_idx == 1:
+                cell.value = "Total"
+                continue
+
+            if header in numeric_headers and header != "upc":
+                total_value = sum(to_float(row.get(header)) for row in rows)
+                cell.value = total_value
+                cell.alignment = RIGHT
+                cell.number_format = "#,##0.000"
+
+                if total_value < 0:
+                    cell.font = Font(color="FF0000", bold=True)
+            else:
+                cell.value = ""
+
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+
+            for cell in column:
+                if cell.value is not None:
                     max_length = max(max_length, len(str(cell.value)))
-            except Exception:
-                pass
 
-        ws.column_dimensions[column_letter].width = min(max_length + 3, 50)
+            ws.column_dimensions[column_letter].width = min(max_length + 3, 50)
+
+        ws.freeze_panes = "A2"
 
     with NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         wb.save(tmp.name)

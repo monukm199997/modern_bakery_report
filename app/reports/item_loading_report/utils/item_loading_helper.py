@@ -1,5 +1,14 @@
-from app.reports.item_loading_report.schemas.item_loading_schema import ItemLoadingRequest
+from fastapi import HTTPException
+from app.reports.item_loading_report.schemas.item_loading_schema import (
+    ItemLoadingRequest,
+)
 from app.utils.helper import validate_mandatory
+from app.reports.item_loading_report.utils.item_loading_sql_query_helper import (
+    DRILL_DOWN_MAP,
+    ORDER_QUANTITY,
+    LOAD_QUANTITY,
+)
+
 
 def build_common_filters(
     payload: ItemLoadingRequest,
@@ -33,46 +42,66 @@ def build_common_filters(
 
     return where_fragments, params
 
+
 def order_quantity():
-    return """
-    ROUND(
-        SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE aod.quantity::numeric * iu.upc::numeric
-            END
-        ),
-        3
-    )
-    """
+    return ORDER_QUANTITY
+
 
 def load_quantity():
-    return """
-    ROUND(
-        SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE ld.qty::numeric * iu.upc::numeric
-            END
-        ),
-        3
-    )
-    """
+    return LOAD_QUANTITY
 
-def prepare_dashboard_context(payload):
-    # validate_mandatory(payload)
+
+def prepare_dashboard_context(payload: ItemLoadingRequest):
+
+    selected_fields = [field.lower() for field in (payload.drill_down_fields or [])]
+
+    order_select_cols = []
+    receive_select_cols = []
+    final_select_cols = []
+
+    order_group_cols = ["aoh.salesman_id"]
+    receive_group_cols = ["lh.salesman_id"]
+
+    order_joins = []
+    receive_joins = []
+
+    join_conditions = ["o.salesman_id = r.salesman_id"]
+
+    for field in selected_fields:
+        if field not in DRILL_DOWN_MAP:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid drill_down_field: {field}",
+            )
+
+        config = DRILL_DOWN_MAP[field]
+
+        order_select_cols.append(config["order_select"])
+        receive_select_cols.append(config["receive_select"])
+        final_select_cols.append(config["final_select"])
+
+        order_group_cols.append(config["order_group_by"])
+        receive_group_cols.append(config["receive_group_by"])
+
+        join_conditions.append(config["join_on"])
+
+        if config.get("order_joins"):
+            order_joins.append(config["order_joins"])
+
+        if config.get("receive_joins"):
+            receive_joins.append(config["receive_joins"])
 
     order_qty = order_quantity()
-    order_value = (
-        order_qty if payload.search_type.lower() == "quantity"
-        else "SUM(aod.net_total)"
-    )
-
     load_qty = load_quantity()
-    load_value = (
-        load_qty if payload.search_type.lower() == "quantity"
-        else "SUM(ld.qty * ld.price)"
-    )
+
+    search_type = payload.search_type.lower()
+
+    if search_type == "quantity":
+        order_value = order_qty
+        load_value = load_qty
+    else:
+        order_value = "SUM(aod.net_total)"
+        load_value = "SUM(ld.qty * ld.price)"
 
     order_where, order_params = build_common_filters(
         payload=payload,
@@ -90,17 +119,21 @@ def prepare_dashboard_context(payload):
         route_alias="rt2",
     )
 
-    order_where.extend([
-        "aoh.deleted_at IS NULL",
-        "aod.deleted_at IS NULL",
-        "aoh.status = '1'",
-        "ac.is_driver = 1",
-    ])
+    order_where.extend(
+        [
+            "aoh.deleted_at IS NULL",
+            "aod.deleted_at IS NULL",
+            "aoh.status = '1'",
+            "ac.is_driver = 1",
+        ]
+    )
 
-    receive_where.extend([
-        "lh.deleted_at IS NULL",
-        "ld.deleted_at IS NULL",
-    ])
+    receive_where.extend(
+        [
+            "lh.deleted_at IS NULL",
+            "ld.deleted_at IS NULL",
+        ]
+    )
 
     params = {**order_params, **receive_params}
 
@@ -109,6 +142,19 @@ def prepare_dashboard_context(payload):
         "receive_where_sql": " AND ".join(receive_where),
         "order_value": order_value,
         "load_volue": load_value,
+        "order_select_sql": (
+            ",\n" + ",\n".join(order_select_cols) if order_select_cols else ""
+        ),
+        "receive_select_sql": (
+            ",\n" + ",\n".join(receive_select_cols) if receive_select_cols else ""
+        ),
+        "final_select_sql": (
+            ",\n" + ",\n".join(final_select_cols) if final_select_cols else ""
+        ),
+        "order_group_sql": ",\n".join(order_group_cols),
+        "receive_group_sql": ",\n".join(receive_group_cols),
+        "order_join_sql": "\n".join(dict.fromkeys(order_joins)),
+        "receive_join_sql": "\n".join(dict.fromkeys(receive_joins)),
+        "join_condition_sql": " AND ".join(join_conditions),
         "params": params,
     }
-
