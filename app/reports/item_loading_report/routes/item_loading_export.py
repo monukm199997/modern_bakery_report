@@ -10,12 +10,8 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.item_loading_report.schemas.item_loading_schema import ItemLoadingRequest
 from app.reports.item_loading_report.utils.item_loading_helper import prepare_dashboard_context
-from app.reports.item_loading_report.utils.item_loading_sql_query_helper import (
-    ORDER_DATA_JOIN,
-    RECIEVE_DATA_JOIN,
-    FINAL_SELECT,
-    
-)
+from app.reports.item_loading_report.routes.item_loading_tableview import build_item_loading_query
+  
 
 router = APIRouter(tags=["Item Loading Report"], dependencies=[Depends(get_current_user)])
 
@@ -63,39 +59,7 @@ def item_loading_export(
 ):
     ctx = prepare_dashboard_context(payload)
 
-    query = f"""
-        WITH ordered_data AS (
-            SELECT
-                aoh.salesman_id
-                {ctx["order_select_sql"]},
-                {ctx["order_value"]} AS ordered_qty,
-                MAX(aoh.comment) AS remarks_by_stores
-            FROM {ORDER_DATA_JOIN}
-            {ctx["order_join_sql"]}
-            WHERE {ctx["order_where_sql"]}
-            GROUP BY {ctx["order_group_sql"]}
-        ),
-        received_data AS (
-            SELECT
-                lh.salesman_id
-                {ctx["receive_select_sql"]},
-                {ctx["load_volue"]} AS received_qty
-            FROM {RECIEVE_DATA_JOIN}
-            {ctx["receive_join_sql"]}
-            WHERE {ctx["receive_where_sql"]}
-            GROUP BY {ctx["receive_group_sql"]}
-        )
-        SELECT
-            s.id AS salesman_id
-            {ctx["final_select_sql"]},
-            {FINAL_SELECT}
-        FROM ordered_data o
-        LEFT JOIN received_data r ON {ctx["join_condition_sql"]}
-        LEFT JOIN salesman s ON s.id = o.salesman_id
-        ORDER BY
-            s.id
-    """
-
+    query = build_item_loading_query(ctx, order_by=True)
     rows = [
         dict(row)
         for row in db.execute(text(query), ctx["params"]).mappings().all()

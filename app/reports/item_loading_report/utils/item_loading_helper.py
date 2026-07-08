@@ -99,6 +99,7 @@ def prepare_dashboard_context(payload: ItemLoadingRequest):
     if search_type == "quantity":
         order_value = order_qty
         load_value = load_qty
+        print(load_qty)
     else:
         order_value = "SUM(aod.net_total)"
         load_value = "SUM(ld.qty * ld.price)"
@@ -123,7 +124,7 @@ def prepare_dashboard_context(payload: ItemLoadingRequest):
         [
             "aoh.deleted_at IS NULL",
             "aod.deleted_at IS NULL",
-            "aoh.status = '1'",
+            "aoh.sap_status = '1'",
             "ac.is_driver = 1",
         ]
     )
@@ -132,6 +133,7 @@ def prepare_dashboard_context(payload: ItemLoadingRequest):
         [
             "lh.deleted_at IS NULL",
             "ld.deleted_at IS NULL",
+            "lh.sap_status = '1'",
         ]
     )
 

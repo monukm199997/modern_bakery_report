@@ -9,28 +9,21 @@ from app.utils.constant import ROWS_PER_PAGE
 from app.reports.item_loading_report.utils.item_loading_sql_query_helper import (
     ORDER_DATA_JOIN,
     RECIEVE_DATA_JOIN,
-    FINAL_SELECT
+    FINAL_SELECT,
+    DISPLAY_UOM,
+    DISPLAY_UPC,
 )
 
 router = APIRouter(tags=["Item Loading Report"], dependencies=[Depends(get_current_user)])
-@router.post("/item-loading-tableview")
-def get_item_loading_rows( 
-    request: Request,
-    payload: ItemLoadingRequest,
-    page: int = Query(1, ge=1),
-    db: Session = Depends(get_db),
-    ):
-    ctx = prepare_dashboard_context(payload)
 
-    offset = (page - 1) * ROWS_PER_PAGE
-    ctx["params"]["limit"] = ROWS_PER_PAGE
-    ctx["params"]["offset"] = offset
-
-    base_query = f"""
+def build_item_loading_query(ctx, *, order_by: bool = False):
+    query = f"""
         WITH ordered_data AS (
             SELECT
                 aoh.salesman_id
                 {ctx["order_select_sql"]},
+                {DISPLAY_UOM} AS uom,
+                {DISPLAY_UPC} AS upc,
                 {ctx["order_value"]} AS ordered_qty,
                 MAX(aoh.comment) AS remarks_by_stores
             FROM {ORDER_DATA_JOIN}
@@ -49,14 +42,41 @@ def get_item_loading_rows(
             GROUP BY {ctx["receive_group_sql"]}
         )
         SELECT
-            s.id AS salesman_id
+            s.id AS salesman_id,
+            s.osa_code AS salesman_code,
+            s.name AS saleman
             {ctx["final_select_sql"]},
-           {FINAL_SELECT}
+            o.uom,
+            o.upc,
+            {FINAL_SELECT}
         FROM ordered_data o
         LEFT JOIN received_data r ON {ctx["join_condition_sql"]}
         LEFT JOIN salesman s ON s.id = o.salesman_id
     """
 
+    if order_by:
+        query += """
+        ORDER BY s.osa_code, s.name
+        """
+
+    return query
+
+
+
+@router.post("/item-loading-tableview")
+def get_item_loading_rows( 
+    request: Request,
+    payload: ItemLoadingRequest,
+    page: int = Query(1, ge=1),
+    db: Session = Depends(get_db),
+    ):
+    ctx = prepare_dashboard_context(payload)
+
+    offset = (page - 1) * ROWS_PER_PAGE
+    ctx["params"]["limit"] = ROWS_PER_PAGE
+    ctx["params"]["offset"] = offset
+
+    base_query = build_item_loading_query(ctx)
     count_query = f"""
         SELECT COUNT(*) 
         FROM ({base_query}) AS count_data
@@ -64,7 +84,7 @@ def get_item_loading_rows(
 
     data_query = f"""
         {base_query}
-        ORDER BY s.id
+        ORDER BY s.osa_code, s.name
         LIMIT :limit OFFSET :offset
     """
 

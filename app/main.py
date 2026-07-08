@@ -48,6 +48,9 @@ from app.reports.vehicles_permit_report.routes.vehicles_permit_export import rou
 from app.reports.item_loading_report.routes.item_loading_tableview import router as item_loading_tableview
 from app.reports.item_loading_report.routes.item_loading_export import router as item_loading_export
 
+from app.reports.numerical_distribution_report.routes.numerical_distribution_tableview import router as numerical_distribution_tableview
+from app.reports.numerical_distribution_report.routes.numerical_distribution_export import router as numerical_distribution_export
+
 app = FastAPI(title="Modern Bakery Reports API")
 
 app.include_router(filters, prefix="/api/filters")
@@ -97,6 +100,9 @@ app.include_router(vehicles_permit_export, prefix="/api/vehicles_permit_report")
 
 app.include_router(item_loading_tableview, prefix="/api/item-loading-report")
 app.include_router(item_loading_export, prefix="/api/item-loading-report")
+
+app.include_router(numerical_distribution_tableview, prefix="/api/numerical_distribution_report")
+app.include_router(numerical_distribution_export, prefix="/api/numerical_distribution_report")
 
 
 app.add_middleware(
