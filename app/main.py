@@ -51,6 +51,9 @@ from app.reports.item_loading_report.routes.item_loading_export import router as
 from app.reports.numerical_distribution_report.routes.numerical_distribution_tableview import router as numerical_distribution_tableview
 from app.reports.numerical_distribution_report.routes.numerical_distribution_export import router as numerical_distribution_export
 
+from app.reports.group_level_report.routes.group_level_tableview import router as group_level_tableview
+from app.reports.group_level_report.routes.group_level_export import router as group_level_export
+
 app = FastAPI(title="Modern Bakery Reports API")
 
 app.include_router(filters, prefix="/api/filters")
@@ -103,6 +106,9 @@ app.include_router(item_loading_export, prefix="/api/item-loading-report")
 
 app.include_router(numerical_distribution_tableview, prefix="/api/numerical_distribution_report")
 app.include_router(numerical_distribution_export, prefix="/api/numerical_distribution_report")
+
+app.include_router(group_level_tableview, prefix="/api/group_level_report")
+app.include_router(group_level_export, prefix="/api/group_level_report")
 
 
 app.add_middleware(
