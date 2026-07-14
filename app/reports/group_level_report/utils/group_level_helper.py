@@ -17,13 +17,6 @@ from app.reports.group_level_report.utils.group_level_sql_query import (
 
 
 def build_group_level_filters(payload: GroupLevelReportRequest):
-    """
-    Filters for the listed-SKU universe (customeritem_header/detail + customer).
-
-    The date range is NOT added here — it belongs inside the sales fact CTE, so
-    the LEFT JOIN keeps every listed row. from_date/to_date are still returned
-    as params because the CTE binds them.
-    """
     where = ["cih.deleted_at IS NULL", "cid.deleted_at IS NULL"]
     params = {"from_date": payload.from_date, "to_date": payload.to_date}
 
@@ -60,7 +53,6 @@ def prepare_group_level_context(payload: GroupLevelReportRequest):
 
     select_cols = []
     group_cols = []
-    order_cols = []
 
     for field in selected:
         if field not in DRILL_DOWN_MAP:
@@ -71,7 +63,6 @@ def prepare_group_level_context(payload: GroupLevelReportRequest):
         config = DRILL_DOWN_MAP[field]
         select_cols.append(config["select"].strip().rstrip(","))
         group_cols.append(config["group_by"])
-        order_cols.append(config["group_by"])
 
     search_type = payload.search_type.lower()
 
@@ -81,13 +72,18 @@ def prepare_group_level_context(payload: GroupLevelReportRequest):
     if search_type in ("quantity", "both"):
         metric_cols += VOLUME_METRICS
 
+    if search_type in ("amount", "both"):
+        order_by_sql = "ORDER BY revenue_net_sales DESC, revenue_sales_return DESC"
+    else:
+        order_by_sql = "ORDER BY volume_net_sales DESC, volume_sales_return DESC"
+        
     where, params = build_group_level_filters(payload)
 
     return {
         "select_sql": ",\n".join(select_cols + metric_cols),
         "where_sql": " AND ".join(where),
         "group_by_sql": ("GROUP BY " + ", ".join(group_cols)) if group_cols else "",
-        "order_by_sql": ("ORDER BY " + ", ".join(order_cols)) if order_cols else "",
+        "order_by_sql": order_by_sql,
         "params": params,
     }
 
