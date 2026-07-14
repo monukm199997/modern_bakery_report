@@ -89,12 +89,18 @@ RETURN_DATA_JOIN = """
         LEFT JOIN tbl_route rr ON rr.id = rh.route_id
 """
 
-RETURN_QTY = """
-        (COALESCE(vr.van_return_qty, 0) + COALESCE(r.return_qty, 0)) AS return_qty
+SOLD_RETURN_NET_QTY = """
+       (COALESCE(sd.sold_qty, 0) + COALESCE(vr.van_return_qty, 0) + COALESCE(r.return_qty, 0))
     """
-NET_SOLD = """
-        (COALESCE(sd.sold_qty, 0) - (COALESCE(vr.van_return_qty, 0) + COALESCE(r.return_qty, 0))) AS diff
-    """
+
+LOAD_UNLOAD_NET_SOLD = """
+            (COALESCE(u.open_stock, 0) + COALESCE(l.load_qty, 0))
+            """
+
+CLOSE_STOCK = f"""
+        {LOAD_UNLOAD_NET_SOLD} - {SOLD_RETURN_NET_QTY}
+"""
+
 SALESMAN_CODE = """
         COALESCE(
             u.salesman_code,
@@ -119,7 +125,8 @@ FINAL_SELECT = f"""
         COALESCE(u.open_stock, 0) AS open_stock,
         COALESCE(l.load_qty, 0) AS load_qty,
         COALESCE(sd.sold_qty, 0) AS sold_qty,
-        {RETURN_QTY},
-        {NET_SOLD}
+        COALESCE(r.return_qty, 0) AS grv_qty,
+        COALESCE(vr.van_return_qty, 0) AS van_return_qty,
+        {CLOSE_STOCK} AS close_stock
             
     """

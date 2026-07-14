@@ -25,7 +25,9 @@ from app.reports.inventory_movement_report.routes.inventory_movement_tableview i
     build_inventory_movement_query,
 )
 
-router = APIRouter(tags=["Inventory Movement Report"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    tags=["Inventory Movement Report"], dependencies=[Depends(get_current_user)]
+)
 
 
 HEADER_FILL = PatternFill(
@@ -114,8 +116,9 @@ def inventory_movement_export(
             "open_stock",
             "load_qty",
             "sold_qty",
-            "return_qty",
-            "diff",
+            "grv_qty",
+            "van_return_qty",
+            "close_stock",
         }
 
         # Body Style
@@ -150,10 +153,7 @@ def inventory_movement_export(
 
             if header in numeric_headers:
 
-                total = sum(
-                    to_float(r._mapping.get(header))
-                    for r in rows
-                )
+                total = sum(to_float(r._mapping.get(header)) for r in rows)
 
                 cell.value = total
                 cell.alignment = RIGHT
