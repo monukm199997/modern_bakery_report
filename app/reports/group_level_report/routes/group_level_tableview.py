@@ -4,16 +4,20 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.group_level_report.schemas.group_schema import GroupLevelTableRequest
 from app.reports.group_level_report.utils.group_level_helper import (
     prepare_group_level_context,
     _build_group_level_query,
 )
 
-router = APIRouter(tags=["Group Level Report"])#, dependencies=[Depends(get_current_user)])
+router = APIRouter(tags=["Group Level Report"])
 
-def get_group_level_page(payload: GroupLevelTableRequest, db: Session):
-  
+
+def get_group_level_page(
+    payload: GroupLevelTableRequest,
+    db: Session,
+):
     ctx = prepare_group_level_context(payload)
 
     page = payload.page
@@ -54,5 +58,7 @@ def get_group_level_page(payload: GroupLevelTableRequest, db: Session):
 def group_level_table(
     payload: GroupLevelTableRequest,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_group_level_page(payload, db)

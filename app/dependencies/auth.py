@@ -40,15 +40,8 @@ def get_current_user(api_key: str = Depends(api_key_header), db: Session = Depen
     get_user_permissions =  """
             SELECT
                 id,
-                name,
-                company,
-                region,
-                route,
-                salesman,
-                outlet_channel,
-                item_category_id,
-                item_id,
-                customer_id
+                role,
+                company
             FROM users
             WHERE id = :user_id
             LIMIT 1

@@ -1,17 +1,15 @@
 from functools import lru_cache
 from typing import Optional
-from unittest import result
-from app.core.database import get_db
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app.core.database import engine
+from app.core.database import get_db, engine
 from app.utils.helper import parse_csv_ids
 from app.dependencies.auth import get_current_user
-from app.common.current_user_permissions import get_user_permissions
 from app.common.filter_permission import apply_permission_filter
 from app.common.query_filter_builder import add_filter
 from copy import deepcopy
+from app.common.permission_scope import resolve_scope
 
 router = APIRouter(tags=["Filters"])
 
@@ -58,332 +56,247 @@ def load_static_filters():
     }
 
 @router.get("/static")
-def get_static_filters(current_user=Depends(get_current_user)):
-
-    perms = get_user_permissions(current_user)
-
+def get_static_filters(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    scope = resolve_scope(db, current_user)
     data = deepcopy(load_static_filters())
 
-    # Restrict company list
-    if perms["company"]:
-        data["company"] = [x for x in data["company"] if x["id"] in perms["company"]]
+    if scope["company_ids"] is not None:
+        allowed = set(scope["company_ids"])
+        data["company"] = [x for x in data["company"] if x["id"] in allowed]
 
-    # Restrict channel list
-    if perms["outlet_channel"]:
-        data["customer_channel"] = [
-            x for x in data["customer_channel"] if x["id"] in perms["outlet_channel"]
-        ]
-
-    # Restrict item category list
-    if perms["item_category"]:
-        data["item_category"] = [
-            x for x in data["item_category"] if x["id"] in perms["item_category"]
-        ]
+    if scope["route_ids"] is not None:
+        if not scope["route_ids"]:
+            data["customer_channel"] = []
+        else:
+            rows = db.execute(
+                text(
+                    """
+                SELECT DISTINCT outlet_channel_id
+                FROM agent_customers
+                WHERE route_id = ANY(:route_ids) AND outlet_channel_id IS NOT NULL
+            """
+            ),
+            {"route_ids": scope["route_ids"]}).fetchall()
+            allowed_ch = {r[0] for r in rows}
+            data["customer_channel"] = [x for x in data["customer_channel"] if x["id"] in allowed_ch]
 
     return data
 
 @router.get("/regions")
 def get_regions(
-    company_ids: Optional[str] = Query(None), current_user=Depends(get_current_user), db:Session = Depends(get_db)
-):
-
-    selected_company_ids = parse_csv_ids(company_ids)
-
-    perms = get_user_permissions(current_user)
-
-    final_company_ids = apply_permission_filter(
-        selected_company_ids,
-        perms["company"]
-    )
-
-    where = []
-    params = {}
-
-    # add_filter(where, params, "company_id", final_company_ids, "company_ids")
-    add_filter(where, params, "id", perms["region"], "region_ids")
-
-    query = """
-        SELECT id, region_code, region_name
-        FROM tbl_region
+    company_ids: Optional[str] = Query(None),
+    current_user=Depends(get_current_user), 
+    db: Session = Depends(get_db)
+    ):
+    query =  """
+        SELECT id, region_code, region_name 
+        FROM tbl_region 
+        ORDER BY region_name
     """
-
-    if where:
-        query += " WHERE " + " AND ".join(where)
-
-    query += " ORDER BY region_name"
-
-    
-    rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
+    rows = db.execute(text(query)).fetchall()
+    return [dict(r._mapping) for r in rows]
 
 @router.get("/routes")
 def get_routes(
     region_ids: Optional[str] = Query(None),
-    current_user=Depends(get_current_user),
-    db:Session = Depends(get_db)
-):
+    current_user=Depends(get_current_user), 
+    db: Session = Depends(get_db)
+    ):
     selected_region_ids = parse_csv_ids(region_ids)
-    perms = get_user_permissions(current_user)
+    scope = resolve_scope(db, current_user)
+    final_region_ids = apply_permission_filter(selected_region_ids, scope["region_ids"])
 
-    final_region_ids = apply_permission_filter(
-        selected_region_ids,
-        perms["region"]
-    )
-
-    where = []
-    params = {}
-
+    where, params = [], {}
     add_filter(where, params, "region_id", final_region_ids, "region_ids")
-    add_filter(where, params, "id", perms["route"], "route_ids")
+    add_filter(where, params, "id",scope["route_ids"], "route_ids")
 
     query = """
-        SELECT id, route_code, route_name
+        SELECT id, route_code, route_name 
         FROM tbl_route
     """
-
     if where:
         query += " WHERE " + " AND ".join(where)
-
     query += " ORDER BY route_name"
-
     rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
+    return [dict(r._mapping) for r in rows]
 
 @router.get("/salesmen")
 def get_salesmen(
     route_ids: Optional[str] = Query(None),
-    current_user=Depends(get_current_user),
-    db:Session = Depends(get_db)
-):
+    current_user=Depends(get_current_user), 
+    db: Session = Depends(get_db)
+    ):
 
     selected_route_ids = parse_csv_ids(route_ids)
+    scope = resolve_scope(db, current_user)
+    final_route_ids = apply_permission_filter(selected_route_ids, scope["route_ids"])
 
-    perms = get_user_permissions(current_user)
-
-    # Case 1: user has explicit route permission
-    if perms["route"] is not None:
-        allowed_route_ids = perms["route"]
-    # Case 2: route=[] -> allow all routes under permitted regions
-    elif perms["region"] is not None:
-
-        rows = db.execute(text("""
-            SELECT id
-            FROM tbl_route
-            WHERE region_id = ANY(:region_ids)
-        """), {
-            "region_ids": perms["region"]
-        }).fetchall()
-
-        allowed_route_ids = [r[0] for r in rows]
-
-    # Case 3: no restriction at all
-    else:
-        allowed_route_ids = None
-
-    # --------------------------------------------------
-    # Apply selected route against allowed route ids
-    # --------------------------------------------------
-
-    final_route_ids = apply_permission_filter(
-        selected_route_ids,
-        allowed_route_ids
-    )
-
-    where = []
-    params = {}
-
+    where, params = [], {}
     add_filter(where, params, "route_id", final_route_ids, "route_ids")
-    add_filter(where, params, "id", perms["salesman"], "salesman_ids")
+    add_filter(where, params, "id", scope["salesman_ids"], "salesman_ids")
 
     query = """
         SELECT id, osa_code, name
         FROM salesman
     """
-
     if where:
         query += " WHERE " + " AND ".join(where)
-
     query += " ORDER BY name"
-
     rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
+    return [dict(r._mapping) for r in rows]
 
 @router.get("/items")
 def get_items(
     category_ids: Optional[str] = Query(None),
-    current_user=Depends(get_current_user),
-    db:Session = Depends(get_db)
-):
-
+    current_user=Depends(get_current_user), 
+    db: Session = Depends(get_db)
+    ):
     selected_category_ids = parse_csv_ids(category_ids)
+    where, params = [], {}
 
-    perms = get_user_permissions(current_user)
-
-    final_category_ids = apply_permission_filter(
-        selected_category_ids,
-        perms["item_category"]
-    )
-
-    where = []
-    params = {}
-
-    add_filter(where, params, "category_id", final_category_ids, "category_ids")
-    add_filter(where, params, "id", perms["item"], "item_ids")
+    add_filter(where, params, "category_id", selected_category_ids, "category_ids")
 
     query = """
-        SELECT id, code, name
+        SELECT id, code, name 
         FROM items
     """
-
     if where:
         query += " WHERE " + " AND ".join(where)
-
     query += " ORDER BY name"
-    
     rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
+    return [dict(r._mapping) for r in rows]
 
 @router.get("/customer")
 def get_customer(
     outlet_channel_ids: Optional[str] = Query(None),
-    current_user=Depends(get_current_user),
-    db:Session = Depends(get_db)
-):
+    current_user=Depends(get_current_user), 
+    db: Session = Depends(get_db)
+    ):
     selected_outlet_channel_ids = parse_csv_ids(outlet_channel_ids)
-    perms = get_user_permissions(current_user)
+    scope = resolve_scope(db, current_user)
 
-    final_outlet_channel_ids = apply_permission_filter(
-        selected_outlet_channel_ids,
-        perms["outlet_channel"]
-    )
+    where, params = [], {}
+    add_filter(where, params, "route_id", scope["route_ids"], "route_ids")
+    add_filter(where, params, "outlet_channel_id", selected_outlet_channel_ids, "outlet_channel_ids")
 
-    where = []
-    params = {}
-
-    add_filter(where, params, "outlet_channel_id", final_outlet_channel_ids, "outlet_channel_ids")
-    add_filter(where, params, "id", perms["customer"], "customer_ids")
-
-    query = """
-        SELECT id, osa_code, name
-        FROM agent_customers
-    """
+    query = "SELECT id, osa_code, name FROM agent_customers"
     if where:
         query += " WHERE " + " AND ".join(where)
     query += " ORDER BY name"
-    
     rows = db.execute(text(query), params).fetchall()
-    result = [dict(r._mapping) for r in rows]
-    return result
+    return [dict(r._mapping) for r in rows]
 
 @router.get("/super_wiser")
 def get_super_wiser(
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    query = """
-        SELECT
-            id,
-            name
-        FROM users 
-        WHERE role = 108
-        ORDER BY name
-    """
-    rows = db.execute(text(query)).fetchall()
+    scope = resolve_scope(db, current_user)
+
+    if scope["salesman_ids"] is None:
+        rows = db.execute(text("""
+            SELECT id, name
+            FROM users
+            WHERE role = 108
+            ORDER BY name
+        """)).fetchall()
+        return [dict(r._mapping) for r in rows]
+
+    if not scope["salesman_ids"]:
+        return []
+    
+    rows = db.execute(text("""
+        SELECT DISTINCT u.id, u.name
+        FROM users u
+        JOIN salesman s ON s.superwiser_id = u.id
+        WHERE u.role = 108
+          AND s.id = ANY(:salesman_ids)
+        ORDER BY u.name
+    """), {"salesman_ids": scope["salesman_ids"]}).fetchall()
     return [dict(r._mapping) for r in rows]
 
 @router.get("/customer_group")
 def get_customer_group(
     customer_ids: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    
-    if customer_ids:
-        customer_id_list = [int(x.strip()) for x in customer_ids.split(",")]
-        query = """
-            SELECT
-                id,
-                cust_group,
-                payment_type
-            FROM agent_customers
-            WHERE id = ANY(:customer_ids)
-            ORDER BY cust_group
-        """
-        rows = db.execute(text(query),{"customer_ids": customer_id_list}).fetchall()
-        return [dict(r._mapping) for r in rows]
+    scope = resolve_scope(db, current_user)
+    selected_customer_ids = parse_csv_ids(customer_ids)
 
-    query = """
-        SELECT DISTINCT
-            cust_group,
-            payment_type
-        FROM agent_customers
-        ORDER BY payment_type, cust_group
-    """
-    rows = db.execute(text(query)).fetchall()
+    where, params = [], {}
+
+    add_filter(where, params, "route_id", scope["route_ids"], "route_ids")
+
+    if selected_customer_ids:
+        add_filter(where, params, "id", selected_customer_ids, "customer_ids")
+        select_cols = "id, cust_group, payment_type"
+        order_by = "ORDER BY cust_group"
+    else:
+        select_cols = "DISTINCT cust_group, payment_type"
+        order_by = "ORDER BY payment_type, cust_group"
+
+    query = f"SELECT {select_cols} FROM agent_customers"
+    if where:
+        query += " WHERE " + " AND ".join(where)
+    query += " " + order_by
+
+    rows = db.execute(text(query), params).fetchall()
     return [dict(r._mapping) for r in rows]
-
 
 @router.get("/customer_group_1")
 def get_customer_group_1(
     customer_ids: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    if customer_ids:
-        customer_id_list = [int(x.strip()) for x in customer_ids.split(",")]
-        query = """
-            SELECT
-                id,
-                customergroup,
-                "CustomerGroupDesc"
-            FROM agent_customers
-            WHERE id = ANY(:customer_ids)
-            ORDER BY customergroup
-        """
-        rows = db.execute(text(query),{"customer_ids": customer_id_list}).fetchall()
-        return [dict(r._mapping) for r in rows]
+    scope = resolve_scope(db, current_user)
+    selected_customer_ids = parse_csv_ids(customer_ids)
 
-    query = """
-        SELECT DISTINCT
-            customergroup,
-            "CustomerGroupDesc"
-        FROM agent_customers
-        ORDER BY "CustomerGroupDesc", customergroup
-    """
-    rows = db.execute(text(query)).fetchall()
+    where, params = [], {}
+    add_filter(where, params, "route_id", scope["route_ids"], "route_ids")
+
+    if selected_customer_ids:
+        add_filter(where, params, "id", selected_customer_ids, "customer_ids")
+        select_cols = 'id, customergroup, "CustomerGroupDesc"'
+        order_by = "ORDER BY customergroup"
+    else:
+        select_cols = 'DISTINCT customergroup, "CustomerGroupDesc"'
+        order_by = 'ORDER BY "CustomerGroupDesc", customergroup'
+
+    query = f"SELECT {select_cols} FROM agent_customers"
+    if where:
+        query += " WHERE " + " AND ".join(where)
+    query += " " + order_by
+
+    rows = db.execute(text(query), params).fetchall()
     return [dict(r._mapping) for r in rows]
 
 @router.get("/customer_group_2")
 def get_customer_group_2(
     customer_ids: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    if customer_ids:
-        customer_id_list = [int(x.strip()) for x in customer_ids.split(",")]
-        query = """
-            SELECT
-                id,
-                customergroup2,
-                "CustomerGroupDesc2"
-            FROM agent_customers
-            WHERE id = ANY(:customer_ids)
-            ORDER BY customergroup2
-        """
-        rows = db.execute(text(query),{"customer_ids": customer_id_list}).fetchall()
-        return [dict(r._mapping) for r in rows]
+    scope = resolve_scope(db, current_user)
+    selected_customer_ids = parse_csv_ids(customer_ids)
 
-    query = """
-        SELECT DISTINCT
-            customergroup2,
-            "CustomerGroupDesc2"
-        FROM agent_customers
-        ORDER BY "CustomerGroupDesc2", customergroup2
-    """
-    rows = db.execute(text(query)).fetchall()
+    where, params = [], {}
+    add_filter(where, params, "route_id", scope["route_ids"], "route_ids")
+
+    if selected_customer_ids:
+        add_filter(where, params, "id", selected_customer_ids, "customer_ids")
+        select_cols = 'id, customergroup2, "CustomerGroupDesc2"'
+        order_by = "ORDER BY customergroup2"
+    else:
+        select_cols = 'DISTINCT customergroup2, "CustomerGroupDesc2"'
+        order_by = 'ORDER BY "CustomerGroupDesc2", customergroup2'
+
+    query = f"SELECT {select_cols} FROM agent_customers"
+    if where:
+        query += " WHERE " + " AND ".join(where)
+    query += " " + order_by
+
+    rows = db.execute(text(query), params).fetchall()
     return [dict(r._mapping) for r in rows]
 

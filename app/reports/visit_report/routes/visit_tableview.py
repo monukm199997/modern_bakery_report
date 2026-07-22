@@ -5,84 +5,45 @@ from app.reports.visit_report.schemas.visit_schema import VisitPlanRequest
 from app.reports.visit_report.utils.visit_helper import prepare_dashboard_context
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
+from app.reports.visit_report.utils.visit_sql_query import BASE_SQL_JOIN, SELECT_SQL
 from app.utils.constant import ROWS_PER_PAGE
 
-router = APIRouter(tags=["Visit Report"], dependencies=[Depends(get_current_user)])
+router = APIRouter(tags=["Visit Report"])
+
 
 @router.post("/visit-tableview")
-def visit_tableview(payload: VisitPlanRequest, request: Request, page: int = Query(1, ge=1), db:Session = Depends(get_db)):
+def visit_tableview(
+    payload: VisitPlanRequest,
+    request: Request,
+    page: int = Query(1, ge=1),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     base_sql = f"""
-            FROM visit_plan vp
-            LEFT JOIN agent_customers ac ON ac.id = vp.customer_id
-            LEFT JOIN tbl_route rt ON rt.id = vp.route_id
-            LEFT JOIN salesman s ON s.id = vp.salesman_id
-            LEFT JOIN users sup ON sup.id = s.superwiser_id AND sup.role = 108
-            LEFT JOIN (
-                SELECT DISTINCT ON (salesman_id, DATE(created_at))
-                    salesman_id,
-                    DATE(created_at) AS login_date,
-                    location
-                FROM tbl_salesman_location
-                ORDER BY salesman_id, DATE(created_at), created_at
-            ) tsl
-                ON tsl.salesman_id = vp.salesman_id
-            AND tsl.login_date = DATE(vp.visit_start_time)
+           {BASE_SQL_JOIN}
             WHERE {ctx['where_sql']}
         """
     count_sql = f"""
             SELECT COUNT(*)
             {base_sql}
         """
-    total_rows = db.execute(text(count_sql), ctx['params']).scalar() or 0
+    total_rows = db.execute(text(count_sql), ctx["params"]).scalar() or 0
     offset = (page - 1) * ROWS_PER_PAGE
-    ctx['params']["limit"] = ROWS_PER_PAGE
-    ctx['params']["offset"] = offset
+    ctx["params"]["limit"] = ROWS_PER_PAGE
+    ctx["params"]["offset"] = offset
 
     query = f"""
             SELECT
-                TO_CHAR(vp.visit_start_time, 'YYYY-MM-DD') AS date,
-                ac.osa_code AS customer_code,
-                ac.name AS customer_name,
-                ac.contact_no AS customer_contact,
-                rt.route_code AS route_code,
-                rt.route_name AS route_name,
-                s.osa_code AS salesman_code,
-                s.name AS salesman_name,
-                sup.name AS superwiser,
-                TO_CHAR(vp.visit_start_time, 'HH24:MI:SS') AS visit_start_time,
-                TO_CHAR(vp.visit_end_time, 'HH24:MI:SS') AS visit_end_time,
-                 COALESCE(
-                    (vp.visit_end_time - vp.visit_start_time)::text,
-                    '-'
-                ) AS time_spent,
-
-                COALESCE(
-                        (
-                            vp.visit_start_time -
-                            LAG(vp.visit_end_time) OVER (
-                                PARTITION BY vp.salesman_id
-                                ORDER BY vp.visit_start_time
-                            )
-                        )::text,
-                        '-'
-                    ) AS idle_time,
-                TO_CHAR(
-                    (tsl.location::jsonb -> 0 ->> 'time')::timestamp,
-                    'HH24:MI:SS'
-                    ) AS login_time,
-                ac.latitude AS customer_latitude,
-                ac.longitude AS customer_longitude,
-                vp.latitude,
-                vp.longitude,
-                vp.shop_status,
-                vp.remark AS reason
+               {SELECT_SQL}
             {base_sql}
             ORDER BY date 
             LIMIT :limit OFFSET :offset
         """
-    rows = db.execute(text(query), ctx['params']).fetchall()
+    rows = db.execute(text(query), ctx["params"]).fetchall()
     result = [dict(r._mapping) for r in rows]
     total_pages = (total_rows + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE
     base_url = str(request.url).split("?")[0]

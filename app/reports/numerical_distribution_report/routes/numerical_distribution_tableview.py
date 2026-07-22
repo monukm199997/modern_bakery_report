@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.numerical_distribution_report.schemas.numerical_distribution_schema import (
     NumericalDistributionRequest,
 )
@@ -20,8 +21,9 @@ def numerical_distribution_tableview(
     payload: NumericalDistributionRequest,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
-
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_numerical_distribution_context(payload)
 
     offset = (page - 1) * ROWS_PER_PAGE

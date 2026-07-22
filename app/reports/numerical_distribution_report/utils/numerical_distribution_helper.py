@@ -28,6 +28,10 @@ def build_sales_document_filters(payload: NumericalDistributionRequest):
         where.append("sdh.route_id = ANY(:route_ids)")
         params["route_ids"] = payload.route_ids
 
+    if payload.item_category_ids:
+        where.append("i.category_id = ANY(:item_category_ids)")
+        params["item_category_ids"] = payload.item_category_ids
+
     return where, params
 
 

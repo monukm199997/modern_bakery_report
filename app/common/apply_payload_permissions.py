@@ -1,134 +1,46 @@
-from app.common.current_user_permissions import get_user_permissions
-from app.common.filter_permission import apply_permission
+from fastapi import HTTPException
+from app.common.permission_scope import resolve_scope
 
+def _clean(value):
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)) and len(value) == 0:
+        return None
+    return list(value)
 
-def apply_payload_permissions(payload, current_user):
+def apply_payload_permissions(payload, db, current_user):
+    scope = resolve_scope(db, current_user)
 
-    perms = get_user_permissions(current_user)
+    if scope["is_admin"]:
+        return payload
 
-    payload.company_ids = apply_permission(
-        getattr(payload, "company_ids", None),
-        perms["company"]
-    )
+    allowed_companies = scope["company_ids"]
+    if not allowed_companies:
+        raise HTTPException(status_code=403, detail="No data permission for this user")
 
-    payload.region_ids = apply_permission(
-        getattr(payload, "region_ids", None),
-        perms["region"]
-    )
+    if hasattr(payload, "company_ids"):
+        requested = _clean(getattr(payload, "company_ids"))
+        if requested is None:
+            payload.company_ids = allowed_companies
+        else:
+            final = [c for c in requested if c in allowed_companies]
+            if not final:
+                raise HTTPException(status_code=403, detail="No permission for requested company_ids")
+            payload.company_ids = final
 
-    payload.route_ids = apply_permission(
-        getattr(payload, "route_ids", None),
-        perms["route"]
-    )
+    for attr in ("route_ids", "salesman_ids"):
+        if not hasattr(payload, attr):
+            continue
 
-    payload.salesman_ids = apply_permission(
-        getattr(payload, "salesman_ids", None),
-        perms["salesman"]
-    )
+        requested = _clean(getattr(payload, attr))
+        if requested is None:
+            setattr(payload, attr, None) 
+            continue
 
-    payload.customer_channel_ids = apply_permission(
-        getattr(payload, "customer_channel_ids", None),
-        perms["outlet_channel"]
-    )
-
-    payload.item_category_ids = apply_permission(
-        getattr(payload, "item_category_ids", None),
-        perms["item_category"]
-    )
-
-    payload.item_ids = apply_permission(
-        getattr(payload, "item_ids", None),
-        perms["item"]
-    )
-
-    # ---------------------------------------------------
-    # Hierarchy propagation
-    # ---------------------------------------------------
-    # If lower level is unrestricted ([] => None)
-    # then automatically restrict by upper level permission
-    # ---------------------------------------------------
-
-    # Company -> Region
-    if (
-        getattr(payload, "region_ids", None) is None
-        and perms["region"] is not None
-    ):
-        payload.region_ids = perms["region"]
-
-    # Region -> Route
-    if (
-        getattr(payload, "route_ids", None) is None
-        and perms["route"] is None
-        and getattr(payload, "region_ids", None) is not None
-    ):
-        # keep route unrestricted, region restriction will control it
-        pass
-
-    # Route -> Salesman
-    if (
-        getattr(payload, "salesman_ids", None) is None
-        and perms["salesman"] is None
-        and (
-            getattr(payload, "route_ids", None) is not None
-            or getattr(payload, "region_ids", None) is not None
-        )
-    ):
-        # keep salesman unrestricted, route/region restriction controls it
-        pass
-
-    # Item Category -> Item
-    if (
-        getattr(payload, "item_ids", None) is None
-        and perms["item"] is None
-        and getattr(payload, "item_category_ids", None) is not None
-    ):
-        # keep item unrestricted inside permitted category
-        pass
+        allowed = scope.get(attr) or []
+        final = [x for x in requested if x in allowed]
+        if not final:
+            raise HTTPException(status_code=403, detail=f"No permission for requested {attr}")
+        setattr(payload, attr, final)
 
     return payload
-
-
-# from app.common.current_user_permissions import get_user_permissions
-# from app.common.filter_permission import apply_permission
-
-
-# def apply_payload_permissions(payload, current_user):
-
-#     perms = get_user_permissions(current_user)
-
-#     payload.company_ids = apply_permission(
-#         getattr(payload, "company_ids", None),
-#         perms["company"]
-#     )
-
-#     payload.region_ids = apply_permission(
-#         getattr(payload, "region_ids", None),
-#         perms["region"]
-#     )
-
-#     payload.route_ids = apply_permission(
-#         getattr(payload, "route_ids", None),
-#         perms["route"]
-#     )
-
-#     payload.salesman_ids = apply_permission(
-#         getattr(payload, "salesman_ids", None),
-#         perms["salesman"]
-#     )
-
-#     payload.customer_channel_ids = apply_permission(
-#         getattr(payload, "customer_channel_ids", None),
-#         perms["salesman"]
-#     )
-
-#     payload.item_category_ids = apply_permission(
-#         getattr(payload, "item_category_ids", None),
-#         perms["item_category"]
-#     )
-
-#     payload.item_ids = apply_permission(
-#         getattr(payload, "item_ids", None),
-#         perms["item"]
-#     )
-
-#     return payload

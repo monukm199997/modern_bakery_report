@@ -14,8 +14,9 @@ DRILL_DOWN_MAP = {
         "select": """
             i.code AS item_code,
             i.name AS item,
+            i.barcode
         """,
-        "group_by": "i.code, i.name",
+        "group_by": "i.code, i.name, i.barcode",
     },
 }
 
