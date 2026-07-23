@@ -5,12 +5,14 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.sales_new_report.schemas.sales_schema import SalesReportRequest
 from app.reports.sales_new_report.utils.sales_helper import prepare_sales_report_context
+from app.common.apply_payload_permissions import apply_payload_permissions
+
 router = APIRouter(tags=["Sales New Report"], dependencies=[Depends(get_current_user)])
 
-
-
-@router.post("/sales-new-tableview")
-def get_sales_report_table(payload: SalesReportRequest, db: Session = Depends(get_db)):
+def get_sales_report_table(
+    payload: SalesReportRequest, 
+    db: Session = Depends(get_db)
+    ):
     ctx = prepare_sales_report_context(payload)
 
     query = f"""
@@ -35,3 +37,12 @@ def get_sales_report_table(payload: SalesReportRequest, db: Session = Depends(ge
         "total_records": len(rows),
         "data": [dict(row) for row in rows],
     }
+
+@router.post("/sales-new-tableview")
+def sales_report_tableview(
+    payload: SalesReportRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    payload = apply_payload_permissions(payload, db, current_user)   # ← call #1
+    return get_sales_report_table(payload, db)

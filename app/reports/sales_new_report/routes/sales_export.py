@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.sales_new_report.schemas.sales_schema import SalesReportRequest
 from app.reports.sales_new_report.routes.sales_tableview import get_sales_report_table
+from app.common.apply_payload_permissions import apply_payload_permissions
 
 router = APIRouter(tags=["Sales New Report"], dependencies=[Depends(get_current_user)])
 
@@ -346,5 +347,7 @@ def export_sales_report(payload, db):
 def export_report(
     payload: SalesReportRequest,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return export_sales_report(payload, db)
