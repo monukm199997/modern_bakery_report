@@ -102,16 +102,7 @@ def prepare_sales_report_context(payload: SalesReportRequest):
 
     extra_joins = []
 
-    if "item" in selected_fields:
-        extra_joins.extend([
-            "LEFT JOIN uom u ON u.id = sdd.uom",
-            """
-            LEFT JOIN item_uoms iu
-                ON iu.item_id = sdd.item_id
-                AND iu.uom_id = sdd.uom
-                AND iu.status = '1'
-            """
-        ])
+    extra_joins.extend(item_drilldown_joins(selected_fields))
 
     select_cols = []
     group_cols = []
@@ -268,11 +259,28 @@ def prepare_sales_pivot_context(payload):
     select_cols.append(f"{period_start_sql} AS period_start")
     group_cols.append(period_start_sql)
     order_cols.append(period_start_sql)
+
+    metric_cols = []
+    if search_type in ("amount", "both"):
+        metric_cols += [
+            REVENUE_GROSS_SALES,
+            REVENUE_GROSS_RETURN,
+            REVENUE_RETURN_PERCENT,
+            REVENUE_NET_SALES,
+        ]
+    if search_type in ("quantity", "both"):
+        metric_cols += [
+            VOLUME_GROSS_SALES,
+            VOLUME_GROSS_RETURN,
+            VOLUME_RETURN_PERCENT,
+            VOLUME_NET_SALES,
+        ]
+ 
  
     where_fragments, params = build_sales_document_filters(payload)
  
     return {
-        "select_sql": ",\n".join(select_cols + [PIVOT_NET_AMOUNT, PIVOT_NET_QUANTITY]),
+        "select_sql": ",\n".join(select_cols + metric_cols),
         "extra_join_sql": "\n".join(extra_joins),
         "where_sql": " AND ".join(where_fragments),
         "group_by_sql": "GROUP BY " + ", ".join(group_cols),
