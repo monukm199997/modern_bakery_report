@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.vehicles_report.schemas.vehicles_schema import VehiclesRequest
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
@@ -21,7 +21,12 @@ HEADER_FILL = PatternFill(start_color="FF993442", end_color="FF993442", fill_typ
 HEADER_FONT = Font(color="FFFFFFFF", bold=True)
 
 @router.post("/vehicle-export")
-def vehicle_export(payload: VehiclesRequest, db: Session = Depends(get_db)):
+def vehicle_export(
+    payload: VehiclesRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
         SELECT 

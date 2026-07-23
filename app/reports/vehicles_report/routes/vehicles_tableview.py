@@ -6,12 +6,19 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.utils.constant import ROWS_PER_PAGE
 from app.reports.vehicles_report.utils.vehicles_helper import prepare_dashboard_context
-
+from app.common.apply_payload_permissions import apply_payload_permissions
 
 router = APIRouter(tags=["vehicles_report"], dependencies=[Depends(get_current_user)])
 
 @router.post("/vehicle-tableview")
-def vehicle_tableview(payload:VehiclesRequest, request: Request, page: int = Query(1, ge=1), db:Session = Depends(get_db)):
+def vehicle_tableview(
+    payload:VehiclesRequest, 
+    request: Request, 
+    page: int = Query(1, ge=1), 
+    db:Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     base_sql = f"""
