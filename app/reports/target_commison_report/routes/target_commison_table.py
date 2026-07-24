@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.target_commison_report.schemas.schemas import (
@@ -320,7 +320,9 @@ def _build_total(
 def sales_achievement_table(
     payload: SalesAchievementSchema,
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     grouped_data, meta = get_sales_achievement_data(db, payload)
 
     group_by = meta["group_by"]

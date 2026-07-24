@@ -14,7 +14,7 @@ from starlette.background import BackgroundTask
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.target_commison_report.schemas.schemas import SalesAchievementSchema
-# Data pipeline now lives in the table-view module; the export only renders it.
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.target_commison_report.routes.target_commison_table import (
     get_sales_achievement_data,
 )
@@ -24,8 +24,8 @@ router = APIRouter(tags=["Target Commission Report"], dependencies=[Depends(get_
 
 
 YELLOW = PatternFill(start_color="993442", end_color="993442", fill_type="solid")
-BLUE = PatternFill(start_color="CC6677", end_color="CC6677", fill_type="solid")
-TOTAL = PatternFill(start_color="CC6677", end_color="CC6677", fill_type="solid")
+BLUE = PatternFill(start_color="993442", end_color="993442", fill_type="solid")
+TOTAL = PatternFill(start_color="993442", end_color="993442", fill_type="solid")
 THIN = Side(style="thin", color="000000")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 BOLD = Font(bold=True, size=10, color="FFFFFF")
@@ -314,7 +314,9 @@ def _cleanup(path: str):
 def sales_achievement_export(
     payload: SalesAchievementSchema,
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     # Same data the table view builds — export only renders it to Excel.
     grouped_data, meta = get_sales_achievement_data(db, payload)
 
