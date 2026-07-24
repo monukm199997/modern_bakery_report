@@ -11,6 +11,8 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.team_master_report.schemas.team_master_schema import TeamMasterRequest
 from app.reports.team_master_report.utils.team_master_helper import prepare_dashboard_context
+from app.common.apply_payload_permissions import apply_payload_permissions
+from app.reports.team_master_report.utils.team_master_sql_query import SELECT_QUERY, JOIN_QUERY
 
 router = APIRouter(tags=["Team Master Report"], dependencies=[Depends(get_current_user)])
 
@@ -39,26 +41,16 @@ CENTER = Alignment(horizontal="center", vertical="center")
 @router.post("/team-master-export")
 def export_team_master(
     payload: TeamMasterRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     query = f"""
         SELECT
-            v.vehicle_code,
-            v.number_plat,
-            rt.route_code,
-            rt.route_name,
-            s.osa_code AS salesman_code,
-            s.name AS salesman_name,
-            sup.name AS superwiser,
-            s.dateof_join,
-            r.region_name
-        FROM salesman s
-        LEFT JOIN tbl_route rt ON s.route_id = rt.id
-        LEFT JOIN tbl_vehicle v ON v.id = rt.vehicle_id
-        LEFT JOIN users sup ON sup.id = s.superwiser_id AND sup.role = 108
-        LEFT JOIN tbl_region r ON rt.region_id = r.id
+          {SELECT_QUERY}
+        {JOIN_QUERY}
         WHERE {ctx['where_sql']}
         ORDER BY rt.route_code, s.osa_code
     """
