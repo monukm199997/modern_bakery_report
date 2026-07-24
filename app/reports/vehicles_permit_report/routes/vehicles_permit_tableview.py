@@ -5,18 +5,25 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.vehicles_permit_report.schemas.vehicles_schema import VehiclesPermitRequest
 from app.reports.vehicles_permit_report.utils.vehicles_helper import prepare_dashboard_context
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.utils.constant import ROWS_PER_PAGE
+from app.reports.vehicles_permit_report.utils.vehicles_sql_query import SELECT_QUERY, JOIN_QUERY
 
 router = APIRouter(tags=["Vehicles Permit Report"], dependencies=[Depends(get_current_user)])
 
 @router.post("/vehicles-permit-report")
-def vehicles_permits_report(payload: VehiclesPermitRequest, request: Request, page: int = Query(1, ge=1), db:Session = Depends(get_db)):
+def vehicles_permits_report(
+    payload: VehiclesPermitRequest, 
+    request: Request, 
+    page: int = Query(1, ge=1), 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     base_sql = f"""
-            FROM vehicle_permit vp
-        LEFT JOIN tbl_vehicle v ON v.id = vp.vehicle_id
-        LEFT JOIN tbl_region r ON r.id = vp.region_id
+            {JOIN_QUERY}
         WHERE {ctx['where_sql']}
     """
     count_sql = f"""
@@ -30,12 +37,7 @@ def vehicles_permits_report(payload: VehiclesPermitRequest, request: Request, pa
 
     query = f"""
         SELECT
-            v.number_plat AS vehicles_number_plate,
-            r.region_code || ' - ' || r.region_name AS region,
-            vp.permit_no AS permit_number,
-            vp.expiry_date AS permit_expiry_date,
-            vp.registration_card_no AS registration_card_number,
-            vp.registration_card_expiry_date
+           {SELECT_QUERY}
         {base_sql}
         ORDER BY permit_expiry_date 
         LIMIT :limit OFFSET :offset

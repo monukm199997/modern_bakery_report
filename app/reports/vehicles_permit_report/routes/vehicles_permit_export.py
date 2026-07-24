@@ -9,6 +9,8 @@ from app.dependencies.auth import get_current_user
 from app.core.database import get_db
 from app.reports.vehicles_permit_report.schemas.vehicles_schema import VehiclesPermitRequest
 from app.reports.vehicles_permit_report.utils.vehicles_helper import prepare_dashboard_context
+from app.common.apply_payload_permissions import apply_payload_permissions
+from app.reports.vehicles_permit_report.utils.vehicles_sql_query import SELECT_QUERY, JOIN_QUERY
 
 router = APIRouter(tags=["Vehicles Permit Report"], dependencies=[Depends(get_current_user)])
 
@@ -36,23 +38,16 @@ CENTER = Alignment(horizontal="center", vertical="center")
 @router.post("/vehicles-permit-export")
 def vehicles_permit_export(
     payload: VehiclesPermitRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     query = f"""
         SELECT
-            v.number_plat AS vehicles_number_plate,
-            r.region_code || ' - ' || r.region_name AS region,
-            vp.permit_no AS permit_number,
-            vp.expiry_date AS permit_expiry_date,
-            vp.registration_card_no AS registration_card_number,
-            vp.registration_card_expiry_date
-        FROM vehicle_permit vp
-        LEFT JOIN tbl_vehicle v
-            ON v.id = vp.vehicle_id
-        LEFT JOIN tbl_region r
-            ON r.id = vp.region_id
+           {SELECT_QUERY}
+        {JOIN_QUERY}
         WHERE {ctx['where_sql']}
         ORDER BY vp.expiry_date
     """
