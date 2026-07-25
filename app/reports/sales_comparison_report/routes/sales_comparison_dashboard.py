@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.sales_comparison_report.schemas.sales_comparison_schema import (
@@ -40,7 +40,12 @@ def _run_group_query(payload: SalesComparisonRequest, db: Session, label_sql: st
 
 
 @router.post("/kpis")
-def comparison_kpis(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+def comparison_kpis(
+    payload: SalesComparisonRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    payload = apply_payload_permissions(payload, db, current_user)
     metric_cols = build_comparison_metric_columns(payload.search_type)
     where, params = build_filters(payload)
 
@@ -77,7 +82,12 @@ def comparison_kpis(payload: SalesComparisonRequest, db: Session = Depends(get_d
 
 
 @router.post("/top-customers")
-def top_customers(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+def top_customers(
+    payload: SalesComparisonRequest, 
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     rows = _run_group_query(
         payload,
         db,
@@ -88,7 +98,12 @@ def top_customers(payload: SalesComparisonRequest, db: Session = Depends(get_db)
 
 
 @router.post("/top-items")
-def top_items(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+def top_items(
+    payload: SalesComparisonRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     rows = _run_group_query(
         payload,
         db,
@@ -99,7 +114,12 @@ def top_items(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/top-salesmen")
-def top_salesmen(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+def top_salesmen(
+    payload: SalesComparisonRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     rows = _run_group_query(
         payload,
         db,
@@ -110,7 +130,12 @@ def top_salesmen(payload: SalesComparisonRequest, db: Session = Depends(get_db))
 
 
 @router.post("/top-routes")
-def top_routes(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+def top_routes(
+    payload: SalesComparisonRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+      ):
+    payload = apply_payload_permissions(payload, db, current_user)
     rows = _run_group_query(
         payload,
         db,
@@ -121,7 +146,12 @@ def top_routes(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/top-customer-groups")
-def top_customer_groups(payload: SalesComparisonRequest, db: Session = Depends(get_db)):
+def top_customer_groups(
+    payload: SalesComparisonRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     rows = _run_group_query(
         payload,
         db,

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.sales_comparison_report.schemas.sales_comparison_schema import (
@@ -18,7 +18,9 @@ router = APIRouter(tags=["Sales Comparison Report"], dependencies=[Depends(get_c
 def sales_comparison_table(
     payload: SalesComparisonRequest,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_comparison_context(payload)
 
     query = f"""
