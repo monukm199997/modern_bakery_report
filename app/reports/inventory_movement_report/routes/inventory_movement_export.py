@@ -12,7 +12,7 @@ from openpyxl.styles import (
     Side,
     Alignment,
 )
-
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.inventory_movement_report.schemas.inventory_movement_schema import (
@@ -72,7 +72,9 @@ def to_float(value):
 def inventory_movement_export(
     payload: InventoryMovementRequest,
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_inventory_movement_context(payload)
 
     query = build_inventory_movement_query(ctx)

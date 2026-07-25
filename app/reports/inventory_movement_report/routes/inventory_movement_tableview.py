@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.inventory_movement_report.schemas.inventory_movement_schema import InventoryMovementRequest
 from app.reports.inventory_movement_report.utils.inventory_movement_helper import prepare_inventory_movement_context
 from app.utils.constant import ROWS_PER_PAGE
@@ -99,7 +100,14 @@ def build_inventory_movement_query(ctx):
 
 
 @router.post("/inventory-movement-tableview")
-def inventory_movement_tableview(payload:InventoryMovementRequest,request:Request, page: int = Query(1, ge=1), db:Session = Depends(get_db)):
+def inventory_movement_tableview(
+    payload:InventoryMovementRequest,
+    request:Request, 
+    page: int = Query(1, ge=1), 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_inventory_movement_context(payload)
 
     offset = (page - 1) * ROWS_PER_PAGE
