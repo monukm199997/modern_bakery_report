@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from tempfile import NamedTemporaryFile
 from fastapi.responses import FileResponse
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
-
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.reports.item_loading_report.schemas.item_loading_schema import ItemLoadingRequest
@@ -55,8 +55,10 @@ def to_float(value):
 @router.post("/item-loading-export")
 def item_loading_export(
     payload: ItemLoadingRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     query = build_item_loading_query(ctx, order_by=True)

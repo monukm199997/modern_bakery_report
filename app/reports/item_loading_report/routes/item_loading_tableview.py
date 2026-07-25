@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.item_loading_report.schemas.item_loading_schema import ItemLoadingRequest
 from app.reports.item_loading_report.utils.item_loading_helper import prepare_dashboard_context
 from app.utils.constant import ROWS_PER_PAGE
@@ -69,7 +70,9 @@ def get_item_loading_rows(
     payload: ItemLoadingRequest,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
     ):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     offset = (page - 1) * ROWS_PER_PAGE
