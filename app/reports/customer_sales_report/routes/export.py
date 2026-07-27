@@ -7,6 +7,7 @@ from app.reports.customer_sales_report.schemas.schemas import (
 )
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.utils.helper import validate_mandatory
 from app.reports.customer_sales_report.utils.customer_report_helper import prepare_dashboard_context, build_dynamic_detail_sql
 from app.reports.customer_sales_report.utils.sql_query_helper import SELECT,FROM_CLAUSE, GROUP_BY
@@ -18,8 +19,11 @@ raw_value_expr = "id.quantity"
 
 @router.post("/export")
 def customer_sale_export(
-    payload: CustomerSalesReportExportRequest, db: Session = Depends(get_db)
+    payload: CustomerSalesReportExportRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     validate_mandatory(payload)
     if payload.view_type not in ("default", "detail"):
         raise HTTPException(400, "view_type must be default or detail")

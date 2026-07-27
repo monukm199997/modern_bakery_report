@@ -4,6 +4,7 @@ from app.reports.customer_sales_report.schemas.schemas import CustomerSalesRepor
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.customer_sales_report.utils.customer_report_helper import prepare_dashboard_context
 from app.reports.customer_sales_report.utils.sql_query_helper import (
 CUSTOMER_SALES_KPIS_SQL,
@@ -15,7 +16,8 @@ OPTIONAL_JOINS_SQL_1
 router = APIRouter(tags=["Customer Sales Report"], dependencies=[Depends(get_current_user)])
 
 @router.post("/customer-sales-kpis")
-def customer_sales_kpis(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):
+def customer_sales_kpis(payload:CustomerSalesReportRequest, db:Session = Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     out = {"kpis":{}}
     query = f"""
@@ -36,7 +38,8 @@ def customer_sales_kpis(payload:CustomerSalesReportRequest, db:Session = Depends
 
 
 @router.post("/customer-sales-trend")
-def customer_sales_trend(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):
+def customer_sales_trend(payload:CustomerSalesReportRequest, db:Session = Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
              SELECT
@@ -56,7 +59,8 @@ def customer_sales_trend(payload:CustomerSalesReportRequest, db:Session = Depend
 
 
 @router.post("/Channel-wise Sales")
-def channel_wise_sales(payload:CustomerSalesReportRequest, db:Session= Depends(get_db)):
+def channel_wise_sales(payload:CustomerSalesReportRequest, db:Session= Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -83,7 +87,8 @@ def channel_wise_sales(payload:CustomerSalesReportRequest, db:Session= Depends(g
 
 
 @router.post("/customer-category-wise-sales")
-def customer_category_wise_sales(payload:CustomerSalesReportRequest, db: Session = Depends(get_db)):
+def customer_category_wise_sales(payload:CustomerSalesReportRequest, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
 
     query = f"""
@@ -110,8 +115,8 @@ def customer_category_wise_sales(payload:CustomerSalesReportRequest, db: Session
 
 
 @router.post("/top-10-items")
-def top_10_items(payload:CustomerSalesReportRequest, db: Session = Depends(get_db)):
-
+def top_10_items(payload:CustomerSalesReportRequest, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -133,7 +138,8 @@ def top_10_items(payload:CustomerSalesReportRequest, db: Session = Depends(get_d
 
 
 @router.post("/top-10-customers")
-def top_10_customers(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):
+def top_10_customers(payload:CustomerSalesReportRequest, db:Session = Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -155,7 +161,8 @@ def top_10_customers(payload:CustomerSalesReportRequest, db:Session = Depends(ge
 
 
 @router.post("/top-10-channels")
-def top_10_channels(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):
+def top_10_channels(payload:CustomerSalesReportRequest, db:Session = Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
@@ -177,7 +184,8 @@ def top_10_channels(payload:CustomerSalesReportRequest, db:Session = Depends(get
 
 
 @router.post("/top-10-customer-categories")
-def top_10_customer_categories(payload:CustomerSalesReportRequest, db:Session = Depends(get_db)):
+def top_10_customer_categories(payload:CustomerSalesReportRequest, db:Session = Depends(get_db), current_user = Depends(get_current_user)):
+    payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_dashboard_context(payload)
     query = f"""
             SELECT
