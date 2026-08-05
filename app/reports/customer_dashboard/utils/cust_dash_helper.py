@@ -1,16 +1,40 @@
 from app.reports.customer_dashboard.schemas.schemas import CustomerDashRequest
-from app.utils.helper import quantity_expr_sql, validate_mandatory, choose_granularity
+from app.utils.helper import validate_mandatory, choose_granularity
 from sqlalchemy import text
 from datetime import datetime, timedelta, date
-from app.reports.sales_dashboard.utils.sales_dash_helper import return_prepare_dashboard_context
-from app.reports.customer_sales_report.utils.sql_query_helper import BASE_SQL as Base_JOIN
 from app.reports.customer_dashboard.utils.query_helper import (
     TOTAL_CUSTOMER_IN_CATEGORY,
     TOTAL_CUSTOMER_IN_CHANNEL,
     TOTAL_CUSTOMER_IN_REGION,
     TOTAL_CUSTOMER_IN_ROUTE,
     BASE_SQL,
+    BASE_JOIN,
+    REVENUE_NET_SALES,
+    VOLUME_NET_SALES,
+    TOTAL_RETURN_REVENUE,
+    TOTAL_RETURN_VOLUME,
+    TOTAL_SALES_REVENUE,
+    TOTAL_SALES_VOLUME,
 )
+
+def get_gross_sales(payload):
+    sales_revenue = TOTAL_SALES_REVENUE
+    sales_volume = TOTAL_SALES_VOLUME
+    if payload.search_type.lower() == "quantity":
+        return sales_volume
+    return sales_revenue
+
+def get_returns(payload):
+    return_revenue = TOTAL_RETURN_REVENUE
+    return_volume = TOTAL_RETURN_VOLUME
+    if payload.search_type.lower() == "quantity":
+        return return_volume
+    return return_revenue
+
+def get_grossSales_returns(payload):
+    sales = get_gross_sales(payload)
+    returns = get_returns(payload)
+    return sales, returns
 
 def previous_period_range(from_date: str, to_date: str):
 
@@ -26,6 +50,15 @@ def previous_period_range(from_date: str, to_date: str):
         prev_start.strftime("%Y-%m-%d"),
         prev_end.strftime("%Y-%m-%d")
     )
+
+def get_net_volue(payload):
+    quantity = VOLUME_NET_SALES
+    amount = REVENUE_NET_SALES
+
+    value_expr =(
+        quantity if payload.search_type.lower() == "quantity" else amount
+    )
+    return value_expr
 
 def build_query_parts(payload: CustomerDashRequest):
     joins = []
@@ -60,23 +93,23 @@ def prepare_dashboard_context(payload: CustomerDashRequest):
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = quantity_expr_sql()
-    value_expr = (
-        quantity if payload.search_type.lower() == "quantity" else "ROUND(SUM(id.item_total)::numeric, 2)"
-    )
+    value_expr = get_net_volue(payload)
+    gross_sales, returns = get_grossSales_returns(payload)
 
     return {
         "join_sql": join_sql,
         "where_sql": where_sql,
         "params": params,
         "value_expr": value_expr,
+        "gross_sales": gross_sales,
+        "returns": returns
     }
 
 def get_active_customers(payload, db):
     ctx = prepare_dashboard_context(payload)
     sql =f"""
         SELECT COUNT(DISTINCT customer_id)
-        FROM invoice_headers ih
+        FROM sales_documents_header ih
         LEFT JOIN salesman s ON s.id = ih.salesman_id
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
@@ -88,8 +121,8 @@ def get_new_customers(payload, db):
     sql = f"""
         SELECT COUNT(*)
         FROM agent_customers
-        WHERE created_at::date
-        BETWEEN :from_date AND :to_date
+        WHERE created_at::date 
+        BETWEEN :from_date AND :to_date AND status = 1
     """
     return db.execute(text(sql), ctx['params']).scalar() or 0
 
@@ -101,7 +134,7 @@ def get_at_risk_customers(payload, db):
             SELECT
                 customer_id,
                 MAX(invoice_date) AS last_sale
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             {ctx['join_sql']}
             GROUP BY customer_id
@@ -118,7 +151,7 @@ def get_inactive_customers(payload, db):
             SELECT
                 customer_id,
                 MAX(invoice_date) AS last_sale
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             {ctx['join_sql']}
             GROUP BY customer_id
@@ -136,12 +169,7 @@ def get_avg_sales_value(payload, db):
                 NULLIF(COUNT(DISTINCT customer_id), 0),
                 0
             )
-        FROM invoice_headers ih
-        LEFT JOIN invoice_details id ON id.header_id = ih.id
-        LEFT JOIN salesman s ON s.id = ih.salesman_id
-        LEFT JOIN item_uoms iu
-                ON iu.item_id = id.item_id
-                AND iu.uom_id = id.uom
+        {BASE_JOIN}
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
     """
@@ -155,7 +183,7 @@ def get_customer_growth(payload, db):
             COUNT(*) AS value
         FROM agent_customers
         WHERE created_at::date
-        BETWEEN :from_date AND :to_date
+        BETWEEN :from_date AND :to_date AND status = 1
         GROUP BY month
         ORDER BY month
     """
@@ -182,7 +210,7 @@ def get_customer_coverage(payload, db):
                 (SELECT total FROM total_customers),
                 2
             ) AS value
-        FROM invoice_headers ih
+        FROM sales_documents_header ih
         LEFT JOIN salesman s ON s.id = ih.salesman_id
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
@@ -200,52 +228,32 @@ def get_customer_coverage(payload, db):
 
 def get_sales_returns(payload, db):
     ctx = prepare_dashboard_context(payload)
-    re_ctx  = return_prepare_dashboard_context(payload)
+
     sql = f"""
         SELECT
             TO_CHAR(ih.invoice_date,'YYYY-MM') AS month,
-            {ctx['value_expr']} AS sales
-        {Base_JOIN}
+            {ctx['gross_sales']} AS sales,
+            {ctx['returns']} AS returns,
+            {ctx['value_expr']} AS net_sales
+        {BASE_JOIN}
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
         GROUP BY month
     """
-
-    return_sql =f"""
-        SELECT
-            TO_CHAR(rh.created_at,'YYYY-MM') AS month,
-            {re_ctx['value_expr']} AS returns
-        FROM return_header rh
-        LEFT JOIN return_details rd ON rd.header_id = rh.id
-        LEFT JOIN salesman s ON s.id = rh.salesman_id
-        LEFT JOIN item_uoms iu
-                ON iu.item_id = rd.item_id
-                AND iu.uom_id = rd.uom_id
-        {re_ctx['join_sql']}
-        WHERE {re_ctx['where_sql']}
-        GROUP BY month
-    """
     sales = db.execute(text(sql),ctx['params']).mappings().all()
-    returns = db.execute(text(return_sql),re_ctx['params']).mappings().all()
     data = {}
     for row in sales:
         data[row["month"]] = {
             "sales": float(row["sales"] or 0),
-            "returns": 0
+            "returns": float(row["returns"] or 0),
+            "net_sales": float(row["net_sales"] or 0)
         }
-    for row in returns:
-        data.setdefault(
-            row["month"],
-            {"sales": 0, "returns": 0}
-        )
-        data[row["month"]]["returns"] = float(
-            row["returns"] or 0
-        )
     return [
         {
             "month": month,
             "sales": values["sales"],
-            "returns": values["returns"]
+            "returns": values["returns"],
+            "net_sales": values["net_sales"]
         }
         for month, values in sorted(data.items())
     ]
@@ -257,7 +265,7 @@ def customer_health(payload, db):
             SELECT
                 ih.customer_id,
                 MAX(ih.invoice_date) AS last_order_date
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
@@ -294,7 +302,7 @@ def customer_health_histogram(payload, db):
             SELECT
                 ih.customer_id,
                 MAX(ih.invoice_date) AS last_order_date
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
@@ -334,7 +342,7 @@ def get_inactive_customer(payload, db):
             SELECT
                 ih.customer_id,
                 MAX(ih.invoice_date) AS last_order_date
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
@@ -354,7 +362,7 @@ def get_risk_customers(payload, db):
             SELECT
                 ih.customer_id,
                 MAX(ih.invoice_date) AS last_order_date
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
@@ -381,7 +389,7 @@ def get_top_customers(payload, db):
             ac.osa_code AS customer_code,
             ac.name AS customer_name,
             {ctx['value_expr']} AS value
-        {Base_JOIN}
+        {BASE_JOIN}
         JOIN agent_customers ac ON ac.id = ih.customer_id
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
@@ -401,7 +409,7 @@ def get_region_customers(payload, db):
             SELECT
             {TOTAL_CUSTOMER_IN_REGION}
             {ctx['value_expr']} AS value
-            {Base_JOIN}
+            {BASE_JOIN}
             {ctx['join_sql']}
             LEFT JOIN tbl_region r ON r.id = rt.region_id
             WHERE {ctx['where_sql']}
@@ -418,7 +426,7 @@ def get_route_customers(payload, db):
         SELECT
             {TOTAL_CUSTOMER_IN_ROUTE}
             {ctx['value_expr']} AS value
-        {Base_JOIN}
+        {BASE_JOIN}
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
         GROUP BY rt.route_name
@@ -434,7 +442,7 @@ def get_channel_customers(payload, db):
             SELECT
             {TOTAL_CUSTOMER_IN_CHANNEL}
             {ctx['value_expr']} AS value
-            {Base_JOIN}
+            {BASE_JOIN}
             JOIN agent_customers ac ON ac.id = ih.customer_id
             JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
             {ctx['join_sql']}
@@ -452,7 +460,7 @@ def get_categories_customers(payload, db):
             SELECT
             {TOTAL_CUSTOMER_IN_CATEGORY}
             {ctx['value_expr']} AS value
-            {Base_JOIN}
+            {BASE_JOIN}
             JOIN agent_customers ac ON ac.id = ih.customer_id
             JOIN customer_categories cc ON cc.id = ac.category_id
             {ctx['join_sql']}
@@ -478,7 +486,7 @@ def get_top_100_customers(payload, db, page, page_size):
                 {ctx['value_expr']}AS revenue,
                 COUNT(DISTINCT ih.id) AS orders,
                 MAX(ih.invoice_date) AS last_order
-            {Base_JOIN}
+            {BASE_JOIN}
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
             GROUP BY ih.customer_id
@@ -497,7 +505,7 @@ def get_top_100_customers(payload, db, page, page_size):
             SELECT
                 customer_id,
                 COUNT(*) AS total_orders
-            FROM invoice_headers
+            FROM sales_documents_header
             GROUP BY customer_id
         )
         SELECT
@@ -522,7 +530,7 @@ def get_top_100_customers(payload, db, page, page_size):
         SELECT COUNT(*)
         FROM (
             SELECT ih.customer_id
-            {Base_JOIN}
+            {BASE_JOIN}
             {ctx['join_sql']}
             WHERE {ctx['where_sql']}
             GROUP BY ih.customer_id
@@ -595,7 +603,7 @@ def get_outstanding_recovery(payload, db, page, page_size):
             SELECT
                 ih.customer_id,
                 MAX(ih.invoice_date) AS last_order
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             LEFT JOIN tbl_route rt ON rt.id = ih.route_id
             WHERE {ctx['where_sql']}
@@ -606,7 +614,7 @@ def get_outstanding_recovery(payload, db, page, page_size):
                 ih.customer_id,
                 s.name AS salesman_name,
                 rt.route_name
-            FROM invoice_headers ih
+            FROM sales_documents_header ih
             LEFT JOIN salesman s ON s.id = ih.salesman_id
             LEFT JOIN tbl_route rt ON rt.id = s.route_id
             WHERE {ctx['where_sql']}
@@ -681,7 +689,7 @@ def get_trend_line(payload, db):
         SELECT
             {period_label_sql} AS period_label,
             {ctx['value_expr']} AS value
-        {Base_JOIN}
+        {BASE_JOIN}
         {ctx['join_sql']}
         WHERE {ctx['where_sql']}
         GROUP BY {period_label_sql},{order_by_sql}

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.customer_dashboard.schemas.schemas import CustomerDashRequest
 from app.reports.customer_dashboard.utils.cust_dash_helper import (
     get_trend_line,
@@ -29,26 +30,57 @@ from app.reports.customer_dashboard.utils.cust_dash_helper import (
 router = APIRouter(tags=["Customer Dashboard"], dependencies=[Depends(get_current_user)])
 
 @router.post("/sales-trend-line")
-def sales_trend_line(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+def sales_trend_line(
+    payload: CustomerDashRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_trend_line(payload, db)
+
 @router.post("/region-customer")
-def region_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+def region_customer(
+    payload: CustomerDashRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_region_customers(payload, db)
 
 @router.post("/route-customer")
-def route_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+def route_customer(
+    payload: CustomerDashRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_route_customers(payload, db)
 
 @router.post("/channel-customer")
-def channel_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+def channel_customer(
+    payload: CustomerDashRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_channel_customers(payload, db)
 
 @router.post("/category-customer")
-def category_customer(payload: CustomerDashRequest, db: Session = Depends(get_db)):
+def category_customer(
+    payload: CustomerDashRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_categories_customers(payload, db)
 
 @router.post("/customer-dashboard-kpis")
-def customer_dashboard_kpis(payload: CustomerDashRequest, db:Session = Depends(get_db)):
+def customer_dashboard_kpis(
+    payload: CustomerDashRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return {
         "total_active_customers": get_active_customers(payload, db),
         "new_customers": get_new_customers(payload, db),
@@ -58,16 +90,25 @@ def customer_dashboard_kpis(payload: CustomerDashRequest, db:Session = Depends(g
     }
 
 @router.post("/customer-growth")
-def customer_growth(payload: CustomerDashRequest, db:Session = Depends(get_db)):
+def customer_growth(
+    payload: CustomerDashRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return {
         "growth": get_customer_growth(payload, db),
-        "coverage": get_customer_coverage(payload, db),
+        "coverage_percentages": get_customer_coverage(payload, db),
         "sales_returns": get_sales_returns(payload, db)
     }
 
 @router.post("/customer-health")
-def customer_health_dashboard(payload: CustomerDashRequest, db:Session = Depends(get_db)):
-
+def customer_health_dashboard(
+    payload: CustomerDashRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     summary = customer_health(payload, db)
     histogram = customer_health_histogram(payload, db)
 
@@ -79,7 +120,12 @@ def customer_health_dashboard(payload: CustomerDashRequest, db:Session = Depends
     }
 
 @router.post("/smart-alerts")
-def smart_alerts(payload: CustomerDashRequest, db:Session = Depends(get_db) ):
+def smart_alerts(
+    payload: CustomerDashRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     alerts = []
     inactive_count = get_inactive_customer(payload, db)
 
@@ -102,23 +148,32 @@ def smart_alerts(payload: CustomerDashRequest, db:Session = Depends(get_db) ):
     return alerts
 
 @router.post("/top-customers")
-def top_customers(payload: CustomerDashRequest,db:Session = Depends(get_db)):
+def top_customers(
+    payload: CustomerDashRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_top_customers(payload, db)
 
 @router.post("/top-100-customers")
 def top_100_customers(
     payload: CustomerDashRequest,
     db:Session = Depends(get_db),
+    current_user = Depends(get_current_user),
     page: int = 1,
     page_size: int = 100
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_top_100_customers(payload, db, page, page_size)
 
 @router.post("/outstanding-recovery")
 def outstanding_recovery(
     payload: CustomerDashRequest,
     db:Session = Depends(get_db),
+    current_user = Depends(get_current_user),
     page: int = 1,
     page_size: int = 10
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return  get_outstanding_recovery(payload, db, page, page_size)
