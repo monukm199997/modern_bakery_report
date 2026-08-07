@@ -1,63 +1,46 @@
-
-RETURN_BASE_SQL = """
-        FROM return_header rh
-        LEFT JOIN return_details rd ON rd.header_id = rh.id
-        LEFT JOIN salesman s ON s.id = rh.salesman_id
-        LEFT JOIN item_uoms iu
-                ON iu.item_id = rd.item_id
-                AND iu.uom_id = rd.uom_id
-        """
-  
 SALES_BASE_SQL = """
-        FROM invoice_headers ih
-            LEFT JOIN invoice_details id ON id.header_id = ih.id
+        FROM sales_documents_header ih
+            LEFT JOIN sales_documents_detail id ON id.header_id = ih.id
             LEFT JOIN salesman s ON s.id = ih.salesman_id
-            LEFT JOIN item_uoms iu
-                ON iu.item_id = id.item_id
-                AND iu.uom_id = id.uom
         """
 
 ORDER_BASE_SQL = """
         FROM agent_order_headers oh
         LEFT JOIN agent_order_details od ON od.header_id = oh.id
         LEFT JOIN salesman s ON s.id = oh.salesman_id
-        LEFT JOIN item_uoms iu
-            ON iu.item_id = od.item_id
-            AND iu.uom_id = od.uom_id
         """
 
 DELIVERY_BASE_SQL = """
         FROM agent_delivery_headers dh
         LEFT JOIN agent_delivery_details dd ON dd.header_id = dh.id
         LEFT JOIN salesman s ON s.id = dh.salesman_id
-        LEFT JOIN item_uoms iu
-            ON iu.item_id = dd.item_id
-            AND iu.uom_id = dd.uom_id
         """
+
+SALES_CUSTOMER_CHANNEL_JOIN_SQL = """
+            LEFT JOIN agent_customers cst ON cst.id = ih.customer_id
+            LEFT JOIN outlet_channel oc ON oc.id = cst.outlet_channel_id
+            """
 
 SALES_ITEM_JOINS_SQL = """
                 LEFT JOIN items i ON i.id = id.item_id
                 LEFT JOIN item_categories ic ON ic.id = i.category_id
             """
+
 SALES_REGION_JOINS_SQL = """
                 LEFT JOIN tbl_route sales_rt ON sales_rt.id = ih.route_id
                 LEFT JOIN tbl_region r ON r.id = sales_rt.region_id
             """
-SALES_BASE_SQL_1 = """
-        FROM invoice_headers ih
-            LEFT JOIN invoice_details id ON id.header_id = ih.id
-            LEFT JOIN item_uoms iu
-                ON iu.item_id = id.item_id
-                AND iu.uom_id = id.uom
-        """
+
 RETURN_CHANNEL_JOINS_SQL = """
                 LEFT JOIN agent_customers cst ON cst.id = rh.customer_id
                 LEFT JOIN outlet_channel oc ON oc.id = cst.outlet_channel_id
             """
+
 RETURN_ITEM_JOINS_SQL = """
                 LEFT JOIN items i ON i.id = rd.item_id
                 LEFT JOIN item_categories ic ON ic.id = i.category_id
             """
+
 RETURN_REGION_JOINS_SQL = """
                 LEFT JOIN tbl_route return_rt ON return_rt.id = rh.route_id
                 LEFT JOIN tbl_region r ON r.id = return_rt.region_id
@@ -86,18 +69,20 @@ PREVIOUS_WEEK_WHERE_SQL = """
 SALES = """
         ROUND(s.sales::numeric, 2) AS sales
     """
+
 RETURN = """
-         ROUND(COALESCE(r.returns, 0)::numeric, 2) AS returns
+        ROUND(COALESCE(s.returns, 0)::numeric, 2) AS returns
     """
+
 SHARE_PERCENTAGE = """
-        ROUND((s.sales/SUM(s.sales) OVER()) * 100, 1) AS share_percentage
-    """
-WOW ="""
-    ROUND(((COALESCE(c.current_sales, 0) - COALESCE(p.previous_sales, 0)) / NULLIF(p.previous_sales, 0)) * 100, 1) AS wow
+        ROUND(((s.sales / SUM(s.sales) OVER()) * 100)::numeric, 1) AS share_percentage
     """
 
+WOW = """
+    ROUND((( COALESCE(c.current_sales, 0) - COALESCE(p.previous_sales, 0)) / NULLIF(p.previous_sales, 0) * 100)::numeric, 1) AS growth_percentage
+    """
 
-SELECT = F"""
+SELECT = f"""
         s.segment,
         {SALES},
         {RETURN},
@@ -108,14 +93,12 @@ SELECT = F"""
 
 FROM_CLAUSE = """
         FROM sales_data s
-        LEFT JOIN return_data r ON r.segment = s.segment
         LEFT JOIN current_week_sales c ON c.segment = s.segment
         LEFT JOIN previous_week_sales p ON p.segment = s.segment
         LEFT JOIN trend_data t ON t.segment = s.segment
         ORDER BY s.sales DESC
         LIMIT :limit
     """
-
 
 ROUTE_COUNT = """
         COUNT(DISTINCT ih.route_id) AS route       
@@ -126,25 +109,26 @@ SALESMAN_COUNT = """
 """
 
 FROM_CLAUSE_1 = """
-        FROM invoice_headers ih
-        JOIN invoice_details id ON id.header_id = ih.id
-        LEFT JOIN item_uoms iu
-                ON iu.item_id = id.item_id
-                AND iu.uom_id = id.uom
+        FROM sales_documents_header ih
+        JOIN sales_documents_detail id ON id.header_id = ih.id
         LEFT JOIN tbl_route rt ON rt.id = ih.route_id
         LEFT JOIN tbl_region r ON r.id = rt.region_id
     """
+
 REGION_SALES = """
         ROUND(r.sales::numeric, 2) AS sales
     """
+
 REGION_CONTRIBUTION = """
-        ROUND((r.sales/SUM(r.sales) OVER()) * 100, 1) AS national_share_percentage
+        ROUND(((r.sales/SUM(r.sales) OVER()) * 100)::numeric, 1) AS national_share_percentage
     """
-WEEK_OVER_WEEK ="""
-        ROUND(((COALESCE(c.current_sales, 0) - COALESCE(p.previous_sales, 0)) / NULLIF(p.previous_sales, 0)) * 100, 1) AS wow
+
+WEEK_OVER_WEEK = """
+        ROUND((((COALESCE(c.current_sales, 0) - COALESCE(p.previous_sales, 0)) / NULLIF(p.previous_sales, 0)) * 100)::numeric, 1) AS wow
     """
+
 PERFORMANCE_SCORE = """
-        ROUND(((r.sales / SUM(r.sales) OVER()) * 100) * 2.1, 0) AS performance_score
+        ROUND((((r.sales / SUM(r.sales) OVER()) * 100) * 2.1)::numeric, 0) AS performance_score
     """
 
 SELECT_1 = f"""
@@ -158,17 +142,8 @@ SELECT_1 = f"""
         """
 
 SALES_OVERVIEW_JOIN_SQL = """
-        FROM invoice_headers ih
-        LEFT JOIN invoice_details id ON id.header_id = ih.id
-        LEFT JOIN item_uoms iu ON iu.item_id = id.item_id
-        AND iu.uom_id = id.uom
-    """
-RETURN_OVERVIEW_JOIN_SQL = """
-        FROM return_header rh
-        LEFT JOIN return_details rd ON rd.header_id = rh.id
-        LEFT JOIN item_uoms iu
-                ON iu.item_id = rd.item_id
-                AND iu.uom_id = rd.uom_id
+        FROM sales_documents_header ih
+        LEFT JOIN sales_documents_detail id ON id.header_id = ih.id
     """
 
 VAN_ROUTE_SELECT_SQL = """
@@ -192,23 +167,17 @@ VAN_ROUTE_GROUP_BY = """
         ac.longitude
     """
 
-
 LOADED_DATA_JOIN_SQL = """
         FROM tbl_load_header lh
         LEFT JOIN tbl_load_details ld ON ld.header_id = lh.id
         LEFT JOIN salesman s ON s.id = lh.salesman_id
-        LEFT JOIN item_uoms iu
-            ON iu.item_id = ld.item_id
-            AND iu.uom_id = ld.uom
+        LEFT JOIN item_uoms iu ON iu.item_id = ld.item_id AND iu.uom_id = ld.displayunit
     """
 
 UNLOADED_DATA_JOIN_SQL = """
         FROM tbl_unload_header ulh
         LEFT JOIN tbl_unload_detail uld ON uld.header_id = ulh.id
         LEFT JOIN salesman s ON s.id = ulh.salesman_id
-        LEFT JOIN item_uoms iu
-            ON iu.item_id = uld.item_id
-            AND iu.uom_id = uld.uom
     """
 
 ORDER_JOIN_SQL = """
@@ -219,4 +188,110 @@ ORDER_JOIN_SQL = """
                 ON iu.item_id = od.item_id
                 AND iu.uom_id = od.uom_id
         LEFT JOIN agent_customers ac ON ac.id = oh.customer_id
+    """
+
+
+SALES_DOC_TYPES = "'ZVCS','YDO','YDI','YSCR','ZSCS','ZFCD','YFCD','YSDR'"
+
+RETURN_DOC_TYPES = "'YRSC','ZRVS'"
+
+SALES_VOLUME = """
+    id.quantity
+    """
+
+SALES_REVENUE = """
+    id.net_total
+"""
+
+TOTAL_RETURN_REVENUE = f"""
+            COALESCE(
+                    SUM(
+                        CASE
+                            WHEN ih.document_type IN ({RETURN_DOC_TYPES})
+                            THEN {SALES_REVENUE}
+                            ELSE 0
+                        END
+                    ),
+                    0
+                )
+            """
+
+TOTAL_SALES_REVENUE = f"""
+                 COALESCE(
+                        SUM(
+                            CASE
+                                WHEN ih.document_type IN ({SALES_DOC_TYPES})
+                                THEN {SALES_REVENUE}
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    )
+                """
+
+TOTAL_RETURN_VOLUME = f"""
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN ih.document_type IN ({RETURN_DOC_TYPES})
+                        THEN {SALES_VOLUME}
+                        ELSE 0
+                    END
+                ),
+                0
+            )
+        """
+
+TOTAL_SALES_VOLUME = f"""
+        COALESCE(
+                SUM(
+                    CASE
+                        WHEN ih.document_type IN ({SALES_DOC_TYPES})
+                        THEN {SALES_VOLUME}
+                        ELSE 0
+                    END
+                ),
+                0
+            )
+        """
+
+REVENUE_NET_SALES = f"""
+            (
+               {TOTAL_SALES_REVENUE}
+                -
+               {TOTAL_RETURN_REVENUE}
+            )
+            """
+
+VOLUME_NET_SALES = f"""
+            (
+               {TOTAL_SALES_VOLUME}
+                -
+               {TOTAL_RETURN_VOLUME}
+            )
+            """
+
+ORDER_VOLUME = "ROUND(SUM(od.quantity)::numeric, 3)"
+ORDER_REVENUE = "ROUND(SUM(od.total)::numeric, 3)"
+
+DELIVERY_VOLUME = "ROUND(SUM(dd.quantity)::numeric, 3)"
+DELIVERY_REVENUE = "ROUND(SUM(dd.total)::numeric, 3)"
+
+LOAD_QUANTITY = """
+        ROUND(
+            SUM(
+                ld.qty
+                / NULLIF(COALESCE(iu.upc::numeric, 1), 0)
+            )::numeric,
+            2
+        )
+    """
+
+UNLOAD_QUANTITY = """
+        ROUND(
+            SUM(
+                uld.qty
+            )::numeric,
+            2
+        )
     """

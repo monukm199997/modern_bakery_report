@@ -1,25 +1,51 @@
 from app.reports.sales_dashboard.schemas.schemas import SalesDashboardKpisRequest
-from app.utils.helper import validate_mandatory, choose_granularity, quantity_expr_sql
 from datetime import datetime
 from sqlalchemy import text
-from app.reports.customer_sales_report.utils.sql_query_helper import (
-    OPTIONAL_JOINS_SQL_1,
-)
 from app.reports.sales_dashboard.utils.sql_query_helper import (
     SALES_ITEM_JOINS_SQL,
     SALES_REGION_JOINS_SQL,
     SALES_BASE_SQL,
-    SALES_BASE_SQL_1,
+    SALES_OVERVIEW_JOIN_SQL,
     RETURN_ITEM_JOINS_SQL,
     RETURN_REGION_JOINS_SQL,
-    RETURN_BASE_SQL,
     RETURN_CHANNEL_JOINS_SQL,
     TREND_DATA_SELECT_SQL,
     PREVIOUS_WEEK_WHERE_SQL,
     SELECT,
     FROM_CLAUSE,
+    SALES_CUSTOMER_CHANNEL_JOIN_SQL,
+    TOTAL_RETURN_REVENUE,
+    TOTAL_RETURN_VOLUME,
+    TOTAL_SALES_REVENUE,
+    TOTAL_SALES_VOLUME,
+    ORDER_VOLUME,
+    ORDER_REVENUE,
+    DELIVERY_VOLUME,
+    DELIVERY_REVENUE,
+    LOAD_QUANTITY,
+    UNLOAD_QUANTITY,
 )
 
+
+def get_gross_sales(payload):
+    sales_revenue = TOTAL_SALES_REVENUE
+    sales_volume = TOTAL_SALES_VOLUME
+    if payload.search_type.lower() == "quantity":
+        return sales_volume
+    return sales_revenue
+
+def get_returns(payload):
+    return_revenue = TOTAL_RETURN_REVENUE
+    return_volume = TOTAL_RETURN_VOLUME
+    if payload.search_type.lower() == "quantity":
+        return return_volume
+    return return_revenue
+
+def get_grossSales_returns(payload):
+    sales = get_gross_sales(payload)
+    returns = get_returns(payload)
+    net_sales = f"({sales} - {returns})"
+    return sales, returns, net_sales
 
 def sales_build_query_parts(payload: SalesDashboardKpisRequest):
     joins = []
@@ -48,87 +74,20 @@ def sales_build_query_parts(payload: SalesDashboardKpisRequest):
     return joins, where_fragments, params
 
 def prepare_dashboard_context(payload: SalesDashboardKpisRequest):
-    validate_mandatory(payload)
-
-    granularity, period_label_sql, order_by_sql = choose_granularity(
-        payload.from_date, payload.to_date
-    )
 
     joins, where_fragments, params = sales_build_query_parts(payload)
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = quantity_expr_sql()
-    value_expr = (
-        quantity if payload.search_type.lower() == "quantity" else "ROUND(SUM(id.item_total)::numeric, 2)"
-    )
-
-    return {
-        "granularity": granularity,
-        "period_label_sql": period_label_sql,
-        "order_by_sql": order_by_sql,
-        "join_sql": join_sql,
-        "where_sql": where_sql,
-        "params": params,
-        "value_expr": value_expr,
-    }
-
-def return_build_query_parts(payload: SalesDashboardKpisRequest):
-    joins = []
-    where_fragments = []
-    params = {}
-
-    where_fragments.append("rh.created_at BETWEEN :from_date AND :to_date")
-    params["from_date"] = payload.from_date
-    params["to_date"] = payload.to_date
-
-    if payload.company_ids:
-        joins.append("LEFT JOIN tbl_route rt ON rt.id = rh.route_id")
-        where_fragments.append("s.company_id = ANY(:company_ids)")
-        params["company_ids"] = payload.company_ids
-
-    if payload.region_ids:
-        joins.append("LEFT JOIN tbl_route rt ON rt.id = rh.route_id")
-        where_fragments.append("rt.region_id = ANY(:region_ids)")
-        params["region_ids"] = payload.region_ids
-
-    if payload.route_ids:
-        where_fragments.append("rh.route_id = ANY(:route_ids)")
-        params["route_ids"] = payload.route_ids
-
-    joins = list(dict.fromkeys(joins))
-    return joins, where_fragments, params
-
-def return_quantity_expr_sql():
-    return """
-    ROUND(
-        SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE rd.item_quantity::numeric * iu.upc::numeric
-            END
-        ),
-        6
-    )
-    """
-
-def return_prepare_dashboard_context(payload: SalesDashboardKpisRequest):
-    validate_mandatory(payload)
-
-    joins, where_fragments, params = return_build_query_parts(payload)
-    where_sql = " AND ".join(where_fragments)
-    join_sql = "\n".join(joins)
-
-    quantity = return_quantity_expr_sql()
-    value_expr = (
-        quantity if payload.search_type.lower() == "quantity" else "ROUND(SUM(rd.total)::numeric, 2)"
-    )
+    gross_sales, returns, net_sales = get_grossSales_returns(payload)
 
     return {
         "join_sql": join_sql,
         "where_sql": where_sql,
         "params": params,
-        "value_expr": value_expr,
+        "gross_sales": gross_sales,
+        "returns": returns,
+        "net_sales": net_sales,
     }
 
 def order_build_query_parts(payload: SalesDashboardKpisRequest):
@@ -157,29 +116,16 @@ def order_build_query_parts(payload: SalesDashboardKpisRequest):
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params
 
-def order_quantity_expr_sql():
-    return """
-   ROUND(
-        SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE od.quantity::numeric * iu.upc::numeric
-            END
-        ),
-        6
-    )
-    """
-
 def order_prepare_dashboard_context(payload: SalesDashboardKpisRequest):
-    validate_mandatory(payload)
 
     joins, where_fragments, params = order_build_query_parts(payload)
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = order_quantity_expr_sql()
+    quantity = ORDER_VOLUME
+    revenue = ORDER_REVENUE
     value_expr = (
-        quantity if payload.search_type.lower() == "quantity" else "SUM(od.total)"
+        quantity if payload.search_type.lower() == "quantity" else revenue
     )
 
     return {
@@ -215,29 +161,16 @@ def delivery_build_query_parts(payload: SalesDashboardKpisRequest):
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params
 
-def delivery_quantity_expr_sql():
-    return """
-   ROUND(
-        SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE dd.quantity::numeric * iu.upc::numeric
-            END
-        ),
-        6
-    )
-    """
-
 def delivery_prepare_dashboard_context(payload: SalesDashboardKpisRequest):
-    validate_mandatory(payload)
 
     joins, where_fragments, params = delivery_build_query_parts(payload)
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = delivery_quantity_expr_sql()
+    quantity = DELIVERY_VOLUME
+    revenue = DELIVERY_REVENUE
     value_expr = (
-        quantity if payload.search_type.lower() == "quantity" else "ROUND(SUM(dd.total)::numeric, 2)"
+        quantity if payload.search_type.lower() == "quantity" else revenue
     )
 
     return {
@@ -273,29 +206,14 @@ def load_build_query_parts(payload):
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params
 
-def load_quantity_expr_sql():
-    return """
-    ROUND(
-        SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE ld.qty::numeric * iu.upc::numeric
-            END
-        ),
-        6
-    )
-    """
-
 def load_prepare_dashboard_context(payload: SalesDashboardKpisRequest):
-    validate_mandatory(payload)
 
     joins, where_fragments, params = load_build_query_parts(payload)
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = load_quantity_expr_sql()
+    quantity = LOAD_QUANTITY
     
-
     return {
         "join_sql": join_sql,
         "where_sql": where_sql,
@@ -329,27 +247,14 @@ def unload_build_query_parts(payload):
     joins = list(dict.fromkeys(joins))
     return joins, where_fragments, params
 
-def unload_quantity_expr_sql():
-    return """
-    ROUND(
-        SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE uld.qty::numeric * iu.upc::numeric
-            END
-        ),
-        6
-    )
-    """
 
 def unload_prepare_dashboard_context(payload: SalesDashboardKpisRequest):
-    validate_mandatory(payload)
-
+  
     joins, where_fragments, params = unload_build_query_parts(payload)
     where_sql = " AND ".join(where_fragments)
     join_sql = "\n".join(joins)
 
-    quantity = unload_quantity_expr_sql()
+    quantity = UNLOAD_QUANTITY
     return {
         "join_sql": join_sql,
         "where_sql": where_sql,
@@ -361,7 +266,7 @@ def get_segment_config(segment_by: str):
     configs = {
         "customer_channel": {
             "sales_join": f"""
-                {OPTIONAL_JOINS_SQL_1}
+                {SALES_CUSTOMER_CHANNEL_JOIN_SQL}
             """,
             "return_join": f"""
                 {RETURN_CHANNEL_JOINS_SQL}
@@ -403,12 +308,10 @@ def get_segment_config(segment_by: str):
 def prepare_channel_performance_context(payload):
 
     sales_ctx = prepare_dashboard_context(payload)
-    return_ctx = return_prepare_dashboard_context(payload)
     segment = get_segment_config(payload.segment_by)
 
     return {
         "sales_ctx": sales_ctx,
-        "return_ctx": return_ctx,
         "segment": segment
     }
 
@@ -416,7 +319,6 @@ def get_sales_performance_data(db, payload):
 
     ctx = prepare_channel_performance_context(payload)
     sales_ctx = ctx["sales_ctx"]
-    return_ctx = ctx["return_ctx"]
     segment = ctx["segment"]
 
     query = f"""
@@ -426,24 +328,12 @@ def get_sales_performance_data(db, payload):
                     {segment['field']},
                     'Others'
                 ) AS segment,
-                {sales_ctx['value_expr']} AS sales
+                {sales_ctx['gross_sales']} AS sales,
+                {sales_ctx['returns']} AS returns
             {SALES_BASE_SQL}
             {segment['sales_join']}
             {sales_ctx['join_sql']}
             WHERE {sales_ctx['where_sql']}
-            GROUP BY 1
-        ),
-        return_data AS (
-            SELECT
-                COALESCE(
-                    {segment.get('return_field', segment['field'])},
-                    'Others'
-                ) AS segment,
-                {return_ctx['value_expr']} AS returns
-            {RETURN_BASE_SQL}
-            {segment['return_join']}
-            {return_ctx['join_sql']}
-            WHERE {return_ctx['where_sql']}
             GROUP BY 1
         ),
         current_week_sales AS (
@@ -452,8 +342,8 @@ def get_sales_performance_data(db, payload):
                     {segment['field']},
                     'Others'
                 ) AS segment,
-                {sales_ctx['value_expr']} AS current_sales
-            {SALES_BASE_SQL_1}
+                {sales_ctx['gross_sales']} AS current_sales
+            {SALES_OVERVIEW_JOIN_SQL}
             {segment['sales_join']}
             {sales_ctx['join_sql']}
             WHERE ih.invoice_date >= CURRENT_DATE - INTERVAL '7 day'
@@ -465,8 +355,8 @@ def get_sales_performance_data(db, payload):
                     {segment['field']},
                     'Others'
                 ) AS segment,
-                {sales_ctx['value_expr']} AS previous_sales
-            {SALES_BASE_SQL_1}
+                {sales_ctx['gross_sales']} AS previous_sales
+            {SALES_OVERVIEW_JOIN_SQL}
             {segment['sales_join']}
             {sales_ctx['join_sql']}
             {PREVIOUS_WEEK_WHERE_SQL}
@@ -482,8 +372,8 @@ def get_sales_performance_data(db, payload):
                         'Others'
                     ) AS segment,
                     DATE(ih.invoice_date) AS sales_date,
-                    {sales_ctx['value_expr']} AS daily_sales
-                {SALES_BASE_SQL_1}
+                    {sales_ctx['gross_sales']} AS daily_sales
+                {SALES_OVERVIEW_JOIN_SQL}
                 {segment['sales_join']}
                 {sales_ctx['join_sql']}
                 WHERE ih.invoice_date >= CURRENT_DATE - INTERVAL '7 day'
@@ -505,12 +395,9 @@ def get_sales_performance_data(db, payload):
     response = {
         "summary": {
             "leader": leader['segment'] if leader else None,
-            "leader_share_percentage": (
-                leader['share_percentage']
-                if leader else 0
-            ),
-            "top_sales": round(total_sales, 2),
 
+            "top_sales": leader['sales'] if leader else 0,
+            
             "avg_returns": round(
                 sum(x['returns'] for x in segments)
                 / len(segments),

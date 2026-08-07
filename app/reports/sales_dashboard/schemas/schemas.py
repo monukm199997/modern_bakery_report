@@ -1,6 +1,7 @@
 from pydantic import BaseModel,  model_validator
 from typing import Optional, List, Literal
 import re
+from datetime import date
 
 class SalesDashboardRequest(BaseModel):
     select_date:str
@@ -26,8 +27,8 @@ class SalesDashboardRequest(BaseModel):
 
 
 class SalesDashboardKpisRequest(BaseModel):
-    from_date: str
-    to_date: str
+    from_date: date
+    to_date: date
     search_type:str = "quantity"
     company_ids: Optional[List[int]] = None
     region_ids: Optional[List[int]] = None
