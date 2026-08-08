@@ -5,6 +5,7 @@ from datetime import date
 
 class SalesDashboardRequest(BaseModel):
     select_date:str
+    company_ids: List[int]
     search_type:str = "quantity"
     view_type: Literal["month", "year"]
 
