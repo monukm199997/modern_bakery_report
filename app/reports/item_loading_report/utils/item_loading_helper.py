@@ -106,7 +106,7 @@ def prepare_dashboard_context(payload: ItemLoadingRequest):
 
     order_where, order_params = build_common_filters(
         payload=payload,
-        date_col="aoh.created_at",
+        date_col="aoh.delivery_date",
         route_col="aoh.route_id",
         salesman_alias="s",
         route_alias="rt",
