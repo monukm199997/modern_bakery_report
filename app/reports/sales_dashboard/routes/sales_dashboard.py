@@ -320,6 +320,21 @@ def van_load_utilization(
     load_ctx = load_prepare_dashboard_context(payload)
     unload_ctx = unload_prepare_dashboard_context(payload)
     sales_ctx = prepare_dashboard_context(payload)
+
+    salesman_where = ["1=1"]
+
+    if payload.company_ids:
+        salesman_where.append(
+            "s.company_id = ANY(:company_ids)"
+        )
+
+    if payload.route_ids:
+        salesman_where.append(
+            "s.route_id = ANY(:route_ids)"
+        )
+
+    salesman_where_sql = " AND ".join(salesman_where)
+
     params = {
             **load_ctx["params"],
             **unload_ctx["params"],
@@ -366,8 +381,7 @@ def van_load_utilization(
         LEFT JOIN loaded_data l ON l.salesman_id = s.id
         LEFT JOIN sold_data sd ON sd.salesman_id = s.id
         LEFT JOIN unload_data u ON u.salesman_id = s.id
-        WHERE s.company_id = ANY(:company_ids)
-        AND s.route_id = ANY(:route_ids)
+        WHERE {salesman_where_sql}
     """
     rows = db.execute(text(query), params).fetchall()
     result = []
@@ -402,6 +416,21 @@ def sales_team_performance(
     amount = TOTAL_SALES_REVENUE
     quantity = TOTAL_SALES_VOLUME
     return_qty = TOTAL_RETURN_VOLUME
+
+    salesman_where = ["1=1"]
+
+    if payload.company_ids:
+        salesman_where.append(
+            "s.company_id = ANY(:company_ids)"
+        )
+    if payload.route_ids:
+        salesman_where.append(
+            "s.route_id = ANY(:route_ids)"
+        )
+
+    salesman_where_sql = " AND ".join(salesman_where)
+
+
     params = {
             **load_ctx["params"],
             **unload_ctx["params"],
@@ -453,8 +482,7 @@ def sales_team_performance(
         LEFT JOIN loaded_data l ON l.salesman_id = s.id
         LEFT JOIN sold_data sd ON sd.salesman_id = s.id
         LEFT JOIN unload_data u ON u.salesman_id = s.id
-        WHERE s.company_id = ANY(:company_ids)
-        AND s.route_id = ANY(:route_ids)
+        WHERE {salesman_where_sql}
     """
 
     rows = db.execute(text(query), params).fetchall()
