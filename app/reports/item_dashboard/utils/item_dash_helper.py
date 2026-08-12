@@ -2,18 +2,15 @@ from app.reports.item_dashboard.schemas.item_dash_schema import ItemDashboardReq
 from app.utils.helper import validate_mandatory, quantity_expr_sql
 from sqlalchemy import text
 from datetime import date, timedelta, datetime
-from app.reports.item_dashboard.utils.sql_query_helper import STOCK_BASE_SQL,STOCK_BASE_SQL_1,SALES_BASE_SQL
+from app.reports.item_dashboard.utils.sql_query_helper import STOCK_BASE_SQL,SALES_BASE_SQL, REVENUE_NET_SALES, VOLUME_NET_SALES
 
 def get_stock_quantity():
     return """
     ROUND(
         SUM(
-            CASE
-                WHEN iu.upc IS NULL THEN 0
-                ELSE d.qty::numeric * iu.upc::numeric
-            END
+            d.qty::numeric 
         ),
-        6
+        3
     )
     """
 
@@ -90,7 +87,7 @@ def build_sales_query_parts(payload):
         where.append("id.item_id = ANY(:item_ids)")
         params["item_ids"] = payload.item_ids
 
-    quantity = quantity_expr_sql()
+    quantity = VOLUME_NET_SALES
     return {
         "join_sql":"\n".join(joins),
         "where_sql":" AND ".join(where) if where else "1=1",
@@ -188,7 +185,7 @@ def stocked_skus(payload, db):
     sql = f"""
     SELECT
     COUNT(DISTINCT d.item_id)
-    {STOCK_BASE_SQL_1}
+    {STOCK_BASE_SQL}
     LEFT JOIN items i ON i.id=d.item_id
     {ctx['join_sql']}
     WHERE
@@ -204,7 +201,7 @@ def inventory_value(payload, db):
     sql = f"""
     SELECT
     COALESCE(SUM(d.qty*d.price),0)
-    {STOCK_BASE_SQL_1}
+    {STOCK_BASE_SQL}
     LEFT JOIN items i ON i.id=d.item_id
     {ctx['join_sql']}
     WHERE
@@ -335,7 +332,7 @@ def dead_stock(payload, db):
     WITH stocked AS(
         SELECT
             d.item_id
-        {STOCK_BASE_SQL_1}
+        {STOCK_BASE_SQL}
         LEFT JOIN items i ON i.id=d.item_id
         {stock_ctx['join_sql']}
         WHERE
@@ -420,7 +417,7 @@ def get_stock_health_route(payload, db, page, page_size):
     FROM(
         SELECT DISTINCT
             h.route_id
-        {STOCK_BASE_SQL_1}
+        {STOCK_BASE_SQL}
         LEFT JOIN items i ON i.id=d.item_id
         {ctx['join_sql']}
         WHERE
@@ -629,7 +626,7 @@ def get_sales_categories(payload, db, page, page_size):
             c.id,
             c.category_name,
             {ctx['quantity']} quantity,
-            ROUND(SUM(id.item_total)::numeric, 2) AS revenue
+            {REVENUE_NET_SALES} AS revenue
         {SALES_BASE_SQL}
         LEFT JOIN items i ON i.id=id.item_id
         {ctx['join_sql']}
@@ -686,7 +683,7 @@ def get_item_aging(payload, db):
         WITH stocked AS(
             SELECT
                 d.item_id
-            {STOCK_BASE_SQL_1}
+            {STOCK_BASE_SQL}
             LEFT JOIN items i ON i.id=d.item_id
             {stock_ctx['join_sql']}
             WHERE
@@ -864,7 +861,7 @@ def get_top_selling_items(payload, db, page, page_size):
             i.name AS item_name,
             c.category_name AS category,
             {ctx['quantity']} quantity,
-            ROUND(SUM(id.item_total)::numeric, 2) revenue
+            {REVENUE_NET_SALES} AS revenue
         {SALES_BASE_SQL}
         LEFT JOIN items i ON i.id = id.item_id
         LEFT JOIN item_categories c ON c.id=i.category_id
@@ -989,7 +986,7 @@ def get_reorder_forecast(payload, db, page, page_size):
         days_zero=999999
 
         if daily_use>0:
-            days_zero=round((r["stock_now"] or 0)/daily_use, 1)
+            days_zero=round(float(r["stock_now"] or 0)/daily_use, 1)
 
         result.append({
         "item_code": r["item_code"],
@@ -1018,7 +1015,7 @@ def get_consumption_trend(payload, db):
         SELECT
             {period_sql} AS  period,
             {ctx['quantity']} AS quantity,
-            ROUND(SUM(id.item_total)::numeric, 2) AS revenue,
+            {REVENUE_NET_SALES} AS revenue,
             {order_sql} AS sort_key
         {SALES_BASE_SQL}
         LEFT JOIN items i ON i.id = id.item_id

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
+from app.common.apply_payload_permissions import apply_payload_permissions
 from app.reports.item_dashboard.schemas.item_dash_schema import ItemDashboardRequest
 from app.reports.item_dashboard.utils.item_dash_helper import (
     total_items,
@@ -30,7 +31,12 @@ from app.reports.item_dashboard.utils.item_dash_helper import (
 router = APIRouter(tags=["Item Dashboard"], dependencies= [Depends(get_current_user)])
 
 @router.post("/kpis")
-def item_dashboard(payload: ItemDashboardRequest, db:Session = Depends(get_db)):
+def item_dashboard(
+    payload: ItemDashboardRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     total = total_items(db)
     active = active_items(db)
     stocked = stocked_skus(payload, db)
@@ -61,8 +67,12 @@ def item_dashboard(payload: ItemDashboardRequest, db:Session = Depends(get_db)):
     }
 
 @router.post("composition")
-def get_composition(payload:ItemDashboardRequest, db:Session = Depends(get_db)):
-    
+def get_composition(
+    payload:ItemDashboardRequest,
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     total = total_items(db)
     active = active_items(db)
     inactive = total - active
@@ -83,16 +93,32 @@ def get_composition(payload:ItemDashboardRequest, db:Session = Depends(get_db)):
 
 @router.post("/stock-health-route")
 def stock_health_route(
-    payload: ItemDashboardRequest, db:Session = Depends(get_db), page: int = 1, page_size: int = 10):
-
+    payload: ItemDashboardRequest, 
+    db:Session = Depends(get_db), 
+    current_user = Depends(get_current_user),
+    page: int = 1, 
+    page_size: int = 10
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_stock_health_route(payload, db, page, page_size)
 
 @router.post("/route-stock-distribution")
-def route_stock_distribution(payload: ItemDashboardRequest, db:Session = Depends(get_db), limit: int = 100):
+def route_stock_distribution(
+    payload: ItemDashboardRequest, 
+    db:Session = Depends(get_db), 
+    current_user = Depends(get_current_user),
+    limit: int = 100
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_route_stock_distribution(payload, db, limit)
 
 @router.post("/stock-movement-trend")
-def stock_movement_trend(payload: ItemDashboardRequest, db:Session = Depends(get_db)):
+def stock_movement_trend(
+    payload: ItemDashboardRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+    payload = apply_payload_permissions(payload, db, current_user)
     purchase_rows = get_purchase_trend(payload, db)
     sales_rows = get_sales_trend(payload, db)
     result={}
@@ -138,46 +164,74 @@ def stock_movement_trend(payload: ItemDashboardRequest, db:Session = Depends(get
     }
 
 @router.post("/fast-slow-movers")
-def fast_slow_movers(payload: ItemDashboardRequest, db:Session = Depends(get_db), limit: int = 10):
+def fast_slow_movers(
+    payload: ItemDashboardRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user), 
+    limit: int = 10
+    ):
+  payload = apply_payload_permissions(payload, db, current_user)
   return get_fast_slow_movers(payload, db, limit)
 
 @router.post("/sales-category")
-def sales_category(payload: ItemDashboardRequest, db:Session = Depends(get_db), page:int=1, page_size:int=10):
+def sales_category(
+    payload: ItemDashboardRequest, 
+    db:Session = Depends(get_db), 
+    current_user = Depends(get_current_user),
+    page:int=1, 
+    page_size:int=10
+    ):
+   payload = apply_payload_permissions(payload, db, current_user)
    return get_sales_categories(payload, db, page, page_size)
 
 @router.post("/item-aging")
-def item_aging(payload:ItemDashboardRequest, db:Session = Depends(get_db)):
+def item_aging(
+    payload:ItemDashboardRequest,
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+   payload = apply_payload_permissions(payload, db, current_user)
    return get_item_aging(payload, db)
 
 @router.post("/low-stock-alerts")
 def low_stock_alerts(
     payload: ItemDashboardRequest,
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
     page: int = 1,
     page_size: int = 10,
     threshold: int = 10
 ):
+ payload = apply_payload_permissions(payload, db, current_user)
  return get_low_stock_alert(payload, db, page, page_size, threshold)
 
 @router.post("/top-selling-items")
 def top_selling_items(
     payload: ItemDashboardRequest,
     db:Session = Depends(get_db),
+    current_user = Depends(get_current_user),
     page: int = 1,
     page_size: int = 10
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_top_selling_items(payload, db, page, page_size)
 
 @router.post("/reorder-forecast")
 def reorder_forecast(
     payload: ItemDashboardRequest,
     db:Session = Depends(get_db),
+    current_user = Depends(get_current_user),
     page:int=1,
     page_size:int=5
 ):
+    payload = apply_payload_permissions(payload, db, current_user)
     return get_reorder_forecast(payload, db, page, page_size)
 
 @router.post("/consumption-trend")
-def consumption_trend(payload: ItemDashboardRequest, db:Session = Depends(get_db)):
+def consumption_trend(
+    payload: ItemDashboardRequest, 
+    db:Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+    ):
+  payload = apply_payload_permissions(payload, db, current_user)
   return get_consumption_trend(payload, db)
-
