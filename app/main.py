@@ -57,6 +57,8 @@ from app.reports.group_level_report.routes.group_level_export import router as g
 from app.reports.inventory_movement_report.routes.inventory_movement_tableview import router as inventory_movement_tableview
 from app.reports.inventory_movement_report.routes.inventory_movement_export import router as inventory_movement_export
 
+from app.reports.sales_team_dashboard.routes.sales_team_dashboard import router as sales_team_dashboard
+
 app = FastAPI(title="Modern Bakery Reports API")
 
 app.include_router(filters, prefix="/api/filters")
@@ -116,6 +118,7 @@ app.include_router(group_level_export, prefix="/api/group_level_report")
 app.include_router(inventory_movement_tableview, prefix="/api/inventory-movement-report")
 app.include_router(inventory_movement_export, prefix="/api/inventory-movement-report")
 
+app.include_router(sales_team_dashboard, prefix="/api/sales_team_dashboard")
 
 app.add_middleware(
     CORSMiddleware,
