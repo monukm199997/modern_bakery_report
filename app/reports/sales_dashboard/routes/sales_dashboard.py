@@ -355,7 +355,8 @@ def van_load_utilization(
          sold_data AS (
             SELECT
                 ih.salesman_id,
-                {sales_ctx['gross_sales']} AS sold
+                {sales_ctx['sold_quantity']} AS sold,
+                {sales_ctx['return_quantity']} AS returns
             {SALES_BASE_SQL}
             {sales_ctx['join_sql']}
             WHERE {sales_ctx['where_sql']}
@@ -376,6 +377,7 @@ def van_load_utilization(
             s.name AS salesman,
             COALESCE(l.loaded, 0) AS loaded,
             COALESCE(sd.sold, 0) AS sold,
+            COALESCE(sd.returns, 0) AS returns,
             COALESCE(u.unloaded, 0) AS unloaded
         FROM salesman s
         LEFT JOIN loaded_data l ON l.salesman_id = s.id
@@ -388,12 +390,14 @@ def van_load_utilization(
     for row in rows:
         loaded = float(row.loaded or 0)
         sold = float(row.sold or 0)
+        returns = float(row.returns or 0)
         unloaded = float(row.unloaded or 0)
         result.append({
             "van_code": row.van_code,
             "salesman": row.salesman,
             "loaded": loaded,
             "sold": sold,
+            "return" : returns,
             "unload": unloaded,
             "in_van": max(loaded - sold - unloaded, 0),
             "load_percentage":

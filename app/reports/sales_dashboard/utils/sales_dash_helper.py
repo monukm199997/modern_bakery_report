@@ -24,6 +24,8 @@ from app.reports.sales_dashboard.utils.sql_query_helper import (
     DELIVERY_REVENUE,
     LOAD_QUANTITY,
     UNLOAD_QUANTITY,
+    TOTAL_SALES_VOLUME,
+    TOTAL_RETURN_VOLUME
 )
 
 
@@ -80,7 +82,8 @@ def prepare_dashboard_context(payload: SalesDashboardKpisRequest):
     join_sql = "\n".join(joins)
 
     gross_sales, returns, net_sales = get_grossSales_returns(payload)
-
+    sold_quantity = TOTAL_SALES_VOLUME
+    return_quantity = TOTAL_RETURN_VOLUME
     return {
         "join_sql": join_sql,
         "where_sql": where_sql,
@@ -88,6 +91,8 @@ def prepare_dashboard_context(payload: SalesDashboardKpisRequest):
         "gross_sales": gross_sales,
         "returns": returns,
         "net_sales": net_sales,
+        "sold_quantity" : sold_quantity,
+        "return_quantity" : return_quantity
     }
 
 def order_build_query_parts(payload: SalesDashboardKpisRequest):
