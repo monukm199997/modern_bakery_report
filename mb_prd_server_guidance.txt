@@ -1,0 +1,29 @@
+
+
+ip - 172.16.0.32   
+username - techno                                                       DB_PASSWORD - Fiequ2tho8equohs@2026!
+																		DB_NAME : modern_bakery_db
+connect from power shell command - 										DB_USER : modern_bakery_user
+																		DB_HOST : 172.16.0.32
+ssh -p 44322 techno@172.16.0.32  										DB_PORT : 	5432
+
+command to restart the report service -
+
+sudo systemctl restart report.service
+
+sudo systemctl status report.service
+
+password - Techn0@321     
+
+
+cd /srv/www/report
+
+
+
+
+
+sudo systemctl stop report.service
+
+sudo systemctl start report.service
+
+sudo journalctl -u report.service -f

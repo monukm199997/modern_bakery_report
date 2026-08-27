@@ -608,31 +608,35 @@ def get_outstanding_recovery(payload, db, page, page_size):
             LEFT JOIN tbl_route rt ON rt.id = ih.route_id
             WHERE {ctx['where_sql']}
             GROUP BY ih.customer_id
-        ),
-        customer_salesman AS (
-            SELECT DISTINCT ON (ih.customer_id)
-                ih.customer_id,
-                s.name AS salesman_name,
-                rt.route_name
-            FROM sales_documents_header ih
-            LEFT JOIN salesman s ON s.id = ih.salesman_id
-            LEFT JOIN tbl_route rt ON rt.id = s.route_id
-            WHERE {ctx['where_sql']}
-            ORDER BY
-                ih.customer_id,
-                ih.invoice_date DESC
         )
+        --customer_salesman AS (
+        --    SELECT DISTINCT ON (ih.customer_id)
+        --        ih.customer_id,
+        --        s.name AS salesman_name,
+        --        rt.route_name
+        --    FROM sales_documents_header ih
+        --    LEFT JOIN salesman s ON s.id = ih.salesman_id
+        --    LEFT JOIN tbl_route rt ON rt.id = s.route_id
+        --    WHERE {ctx['where_sql']}
+        --    ORDER BY
+        --        ih.customer_id,
+        --        ih.invoice_date DESC
+        --)
         SELECT
             ac.id,
             ac.osa_code,
             ac.name,
-            COALESCE(cs.route_name,'-') AS route,
-            COALESCE(cs.salesman_name,'-') AS salesman,
+            COALESCE(rt.route_name,'-') AS route,
+            COALESCE(s.name,'-') AS salesman,
+            --COALESCE(cs.route_name,'-') AS route,
+            --COALESCE(cs.salesman_name,'-') AS salesman,
             clo.last_order,
             COALESCE(ac.credit_limit,0) AS outstanding
         FROM agent_customers ac
+        LEFT JOIN tbl_route rt ON rt.id = ac.route_id
+        LEFT JOIN salesman s ON s.route_id = ac.route_id
         LEFT JOIN customer_last_order clo ON clo.customer_id = ac.id
-        LEFT JOIN customer_salesman cs ON cs.customer_id = ac.id
+        --LEFT JOIN customer_salesman cs ON cs.customer_id = ac.id
         WHERE COALESCE(ac.credit_limit,0) > 0
         ORDER BY outstanding DESC
         LIMIT :limit

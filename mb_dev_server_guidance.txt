@@ -1,0 +1,67 @@
+
+ip - 172.16.0.11    
+username - techno
+
+connect from power shell command - 
+
+ssh -p 44322 techno@172.16.0.11       
+
+command to restart the report service -
+
+sudo systemctl restart modern-bakery-report.service
+
+password - QuaiYiew5ieK   
+
+
+cd /srv/www/report
+
+
+
+DB_USER=modern_bakery_user
+DB_PASSWORD=V4H?Q!6PZwXw$+C
+DB_HOST=172.16.0.11
+DB_PORT=5432
+DB_NAME=modern_bakery
+
+
+___________________________________________________________________________________________________________________________________________________________
+
+--> How to restart the server
+
+1. sudo systemctl restart modern_bakery_reports
+
+2. password -   TPs9z%N@vaD&*Q
+
+3. sudo systemctl status modern_bakery_reports
+
+
+____________________________________________________________________________________________________________________________________________________________
+
+--> How to open nano file
+
+1. sudo nano /etc/systemd/system/modern_bakery_reports.service
+
+	AND THEN OPEN LIKE THAT
+	
+			[Unit]
+		Description=Modern Bakery Reports API
+		After=network.target
+
+		[Service]
+		User=dev-1
+		WorkingDirectory=/home/dev-1/modern_bakery_reports
+		ExecStart=/usr/bin/uvicorn app.main:app --host 0.0.0.0 --port 8002
+		Restart=always
+
+		[Install]
+		WantedBy=multi-user.target
+
+2. for save press ctrl + O 
+3. for exit press ctrl + X
+
+4. sudo systemctl daemon-reload
+____________________________________________________________________________________________________________________________________________________________
+
+--> how to run or start server
+
+1. uvicorn app.main:app --host 0.0.0.0 --port 8002
