@@ -109,8 +109,8 @@ def _build_group_level_query(ctx, extra_select="", tail=""):
         )
         SELECT
             {select_sql}
-        FROM customeritem_header cih
-        JOIN customeritem_detail cid ON cid.header_id = cih.id
+        FROM customeritem_headers cih
+        JOIN customeritem_details cid ON cid.header_id = cih.id
         LEFT JOIN items i ON i.id = cid.item_id
         LEFT JOIN agent_customers ac ON ac.id = cih.customer_id
         LEFT JOIN sales_facts f ON f.customer_id = cih.customer_id AND f.item_id = cid.item_id
