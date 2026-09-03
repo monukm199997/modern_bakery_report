@@ -1,8 +1,8 @@
 from calendar import monthrange
 from collections import defaultdict
 from datetime import datetime
-
-from fastapi import APIRouter, Depends
+from app.utils.constant import ROWS_PER_PAGE
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.common.apply_payload_permissions import apply_payload_permissions
@@ -319,6 +319,8 @@ def _build_total(
 @router.post("/sales-achievement-table")
 def sales_achievement_table(
     payload: SalesAchievementSchema,
+    request: Request,
+    page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
@@ -398,7 +400,32 @@ def sales_achievement_table(
         monthly_target=g["monthly_target"],
     ))
 
+    total_rows = len(rows)
+    offset = (page - 1) * ROWS_PER_PAGE
+    total_pages = ((total_rows + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE if total_rows > 0 else 0)
+    rows_data = rows[offset: offset + ROWS_PER_PAGE]
+    base_url = str(request.url).split("?")[0]
+
+
     return {
         "meta": {**meta, "row_count": len(rows)},
-        "rows": rows,
+        "pagination": {
+            "total_rows": total_rows,
+            "total_pages": total_pages,
+            "current_page": page,
+            "page_size": ROWS_PER_PAGE,
+
+            "next_page": (
+                f"{base_url}?page={page + 1}"
+                if page < total_pages
+                else None
+            ),
+
+            "prev_page": (
+                f"{base_url}?page={page - 1}"
+                if page > 1
+                else None
+            ),
+        },
+        "rows_data": rows_data,
     }
