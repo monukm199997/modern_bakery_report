@@ -4,8 +4,12 @@ from sqlalchemy import text
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.common.apply_payload_permissions import apply_payload_permissions
-from app.reports.inventory_movement_report.schemas.inventory_movement_schema import InventoryMovementRequest
-from app.reports.inventory_movement_report.utils.inventory_movement_helper import prepare_inventory_movement_context
+from app.reports.inventory_movement_report.schemas.inventory_movement_schema import (
+    InventoryMovementRequest,
+)
+from app.reports.inventory_movement_report.utils.inventory_movement_helper import (
+    prepare_inventory_movement_context,
+)
 from app.utils.constant import ROWS_PER_PAGE
 from app.reports.inventory_movement_report.utils.inventory_movement_sql_query import (
     UNLOAD_DATA_JOIN,
@@ -15,10 +19,15 @@ from app.reports.inventory_movement_report.utils.inventory_movement_sql_query im
     RETURN_DATA_JOIN,
     FINAL_SELECT,
     SALESMAN_CODE,
-    SALESMAN_NAME
+    SALESMAN_NAME,
+    ITEM_NAME,
+    ITEM_CATEGORY,
 )
 
-router = APIRouter(tags=["Inventory Movement Report"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    tags=["Inventory Movement Report"], dependencies=[Depends(get_current_user)]
+)
+
 
 def build_inventory_movement_query(ctx):
 
@@ -28,85 +37,109 @@ def build_inventory_movement_query(ctx):
                 uh.salesman_id,
                 su.osa_code AS salesman_code,
                 su.name AS salesman_name,
+                ud.item_id,
+                i.name AS item_name,
+                i.category_id AS category_id,
+                ic.category_name AS item_category,
                 {ctx['unload_quantity']} AS open_stock
             FROM {UNLOAD_DATA_JOIN}
             WHERE {ctx['unload_where']}
-            GROUP BY uh.salesman_id, su.osa_code, su.name
+            GROUP BY uh.salesman_id, su.osa_code, su.name, ud.item_id, i.name, i.category_id, ic.category_name
         ),
         load_data AS (
             SELECT
                 lh.salesman_id,
                 sl.osa_code AS salesman_code,
                 sl.name AS salesman_name,
+                ld.item_id,
+                i.name AS item_name,
+                i.category_id AS category_id,
+                ic.category_name AS item_category,
                 {ctx['load_quantity']} AS load_qty
             FROM {LOAD_DATA_JOIN}
             WHERE {ctx['load_where']}
-            GROUP BY lh.salesman_id, sl.osa_code, sl.name
+            GROUP BY lh.salesman_id, sl.osa_code, sl.name, ld.item_id, i.name, i.category_id, ic.category_name
         ),
         sales_data AS (
             SELECT
                 ih.salesman_id,
                 si.osa_code AS salesman_code,
                 si.name AS salesman_name,
+                id.item_id,
+                i.name AS item_name,
+                i.category_id AS category_id,
+                ic.category_name AS item_category,
                 {ctx['sales_quantity']} AS sold_qty
             FROM {SALES_DATA_JOIN}
             WHERE {ctx['sales_where']}
-            GROUP BY ih.salesman_id, si.osa_code, si.name
+            GROUP BY ih.salesman_id, si.osa_code, si.name, id.item_id, i.name, i.category_id, ic.category_name
         ),
         van_return_data AS (
             SELECT
                 vrh.salesman_id,
                 svr.osa_code AS salesman_code,
                 svr.name AS salesman_name,
+                vrd.item_id,
+                i.name AS item_name,
+                i.category_id AS category_id,
+                ic.category_name AS item_category,
                 {ctx['van_return_quantity']} AS van_return_qty
             FROM {VAN_RETURN_DATA_JOIN}
             WHERE {ctx['van_return_where']}
-            GROUP BY vrh.salesman_id, svr.osa_code, svr.name
+            GROUP BY vrh.salesman_id, svr.osa_code, svr.name, vrd.item_id, i.name, i.category_id, ic.category_name
         ),
         return_data AS (
             SELECT
                 rh.salesman_id,
                 sr.osa_code AS salesman_code,
                 sr.name AS salesman_name,
+                rd.item_id,
+                i.name AS item_name,
+                i.category_id AS category_id,
+                ic.category_name AS item_category,
                 {ctx['return_quantity']} AS return_qty
             FROM {RETURN_DATA_JOIN}
             WHERE {ctx['return_where']}
-            GROUP BY rh.salesman_id, sr.osa_code, sr.name
+            GROUP BY rh.salesman_id, sr.osa_code, sr.name, rd.item_id, i.name, i.category_id, ic.category_name
         ),
         salesmen AS (
-            SELECT salesman_id FROM unload_data
+            SELECT salesman_id, item_id, category_id FROM unload_data
             UNION
-            SELECT salesman_id FROM load_data
+            SELECT salesman_id, item_id, category_id FROM load_data
             UNION
-            SELECT salesman_id FROM sales_data
+            SELECT salesman_id, item_id, category_id FROM sales_data
             UNION
-            SELECT salesman_id FROM van_return_data
+            SELECT salesman_id, item_id, category_id FROM van_return_data
             UNION
-            SELECT salesman_id FROM return_data            
+            SELECT salesman_id, item_id, category_id FROM return_data            
         )
         SELECT
             s.salesman_id,
+            s.item_id,
+            s.category_id,
             {SALESMAN_CODE}
             {SALESMAN_NAME}
+            {ITEM_NAME}
+            {ITEM_CATEGORY}
             {FINAL_SELECT}
         FROM salesmen s
-        LEFT JOIN unload_data u ON u.salesman_id = s.salesman_id
-        LEFT JOIN load_data l ON l.salesman_id = s.salesman_id
-        LEFT JOIN sales_data sd ON sd.salesman_id = s.salesman_id
-        LEFT JOIN van_return_data vr ON vr.salesman_id = s.salesman_id
-        LEFT JOIN return_data r ON r.salesman_id = s.salesman_id
+        LEFT JOIN unload_data u ON u.salesman_id = s.salesman_id AND u.item_id = s.item_id AND u.category_id = s.category_id
+        LEFT JOIN load_data l ON l.salesman_id = s.salesman_id AND l.item_id = s.item_id AND l.category_id = s.category_id
+        LEFT JOIN sales_data sd ON sd.salesman_id = s.salesman_id AND sd.item_id = s.item_id AND sd.category_id = s.category_id
+        LEFT JOIN van_return_data vr ON vr.salesman_id = s.salesman_id AND vr.item_id = s.item_id AND vr.category_id = s.category_id
+        LEFT JOIN return_data r ON r.salesman_id = s.salesman_id AND r.item_id = s.item_id AND r.category_id = s.category_id
     """
     return query
 
 
 @router.post("/inventory-movement-tableview")
 def inventory_movement_tableview(
-    payload:InventoryMovementRequest,
-    request:Request, 
-    page: int = Query(1, ge=1), 
-    db:Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-    ):
+    payload: InventoryMovementRequest,
+    request: Request,
+    page: int = Query(1, ge=1),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     payload = apply_payload_permissions(payload, db, current_user)
     ctx = prepare_inventory_movement_context(payload)
 

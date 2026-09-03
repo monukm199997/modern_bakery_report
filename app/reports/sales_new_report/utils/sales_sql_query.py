@@ -300,4 +300,14 @@ PIVOT_NET_QUANTITY = f"""
       - COALESCE(SUM(CASE WHEN sdh.document_type IN ({RETURN_DOC_TYPES}) THEN {SALES_VOLUME} ELSE 0 END), 0)
     ) AS net_quantity
 """
- 
+
+JOINS_SQL = """
+        FROM sales_documents_header sdh
+        JOIN sales_documents_detail sdd ON sdd.header_id = sdh.id
+        LEFT JOIN salesman sm ON sm.id = sdh.salesman_id
+        LEFT JOIN users sup ON sup.id = sm.superwiser_id AND sup.role = 108
+        LEFT JOIN items i ON i.id = sdd.item_id
+        LEFT JOIN agent_customers ac ON ac.id = sdh.customer_id
+        LEFT JOIN outlet_channel oc ON oc.id = ac.outlet_channel_id
+        LEFT JOIN tbl_route rt ON rt.id = sdh.route_id
+    """

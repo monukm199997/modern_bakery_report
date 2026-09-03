@@ -99,6 +99,10 @@ def inventory_movement_export(
 
         if "salesman_id" in headers:
             headers.remove("salesman_id")
+        if "item_id" in headers:
+            headers.remove("item_id")
+        if "category_id" in headers:
+            headers.remove("category_id")
 
         ws.append([pretty_header(h) for h in headers])
 

@@ -55,6 +55,8 @@ UNLOAD_DATA_JOIN = """
         JOIN tbl_unload_detail ud ON ud.header_id = uh.id AND ud.deleted_at IS NULL
         LEFT JOIN salesman su ON su.id = uh.salesman_id
         LEFT JOIN tbl_route ru ON ru.id = uh.route_id
+        LEFT JOIN items i ON i.id = ud.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
 """
 
 LOAD_DATA_JOIN = f"""
@@ -62,31 +64,36 @@ LOAD_DATA_JOIN = f"""
         JOIN tbl_load_details ld ON ld.header_id = lh.id AND ld.deleted_at IS NULL
         LEFT JOIN salesman sl ON sl.id = lh.salesman_id
         LEFT JOIN tbl_route rl ON rl.id = lh.route_id
+        LEFT JOIN items i ON i.id = ld.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
         {ITEM_UOM_UPC_JOIN}
 """
 
 SALES_DATA_JOIN = """
         invoice_headers ih
         JOIN invoice_details id ON id.header_id = ih.id AND id.deleted_at IS NULL
-        LEFT JOIN agent_customers aci ON aci.id = ih.customer_id
         LEFT JOIN salesman si ON si.id = ih.salesman_id
         LEFT JOIN tbl_route ri ON ri.id = ih.route_id
+        LEFT JOIN items i ON i.id = id.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
 """
 
 VAN_RETURN_DATA_JOIN = """
         mbvreturn_header vrh
         JOIN mbvreturn_details vrd ON vrd.header_id = vrh.id AND vrd.deleted_at IS NULL
-        LEFT JOIN agent_customers acvr ON acvr.id = vrh.customer_id
         LEFT JOIN salesman svr ON svr.id = vrh.salesman_id
         LEFT JOIN tbl_route rvr ON rvr.id = vrh.route_id
+        LEFT JOIN items i ON i.id = vrd.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
 """
 
 RETURN_DATA_JOIN = """
         return_header rh
         JOIN return_details rd ON rd.header_id = rh.id AND rd.deleted_at IS NULL
-        LEFT JOIN agent_customers acr ON acr.id = rh.customer_id
         LEFT JOIN salesman sr ON sr.id = rh.salesman_id
         LEFT JOIN tbl_route rr ON rr.id = rh.route_id
+        LEFT JOIN items i ON i.id = rd.item_id
+        LEFT JOIN item_categories ic ON ic.id = i.category_id
 """
 
 SOLD_RETURN_NET_QTY = """
@@ -120,6 +127,26 @@ SALESMAN_NAME ="""
             r.salesman_name
     ) AS salesman_name,
 """
+
+ITEM_NAME =""" 
+        COALESCE(
+            u.item_name,
+            l.item_name,
+            sd.item_name,
+            vr.item_name,
+            r.item_name
+        ) AS item_name,
+    """
+
+ITEM_CATEGORY = """ 
+        COALESCE(
+            u.item_category,
+            l.item_category,
+            sd.item_category,
+            vr.item_category,
+            r.item_category
+        ) AS item_category,
+    """
 
 FINAL_SELECT = f"""
         COALESCE(u.open_stock, 0) AS open_stock,

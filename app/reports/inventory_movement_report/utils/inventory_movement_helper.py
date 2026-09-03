@@ -16,8 +16,7 @@ def build_common_filters(
     route_col: str,
     salesman_alias: str,
     route_alias: str,
-    customer_alias: str = None,
-    use_route_channel: bool = False,
+    item_alias: str,
     previous_day: bool = False,
 ):
     where_fragments = []
@@ -43,25 +42,13 @@ def build_common_filters(
         where_fragments.append(f"{route_col} = ANY(:route_ids)")
         params["route_ids"] = payload.route_ids
 
-    if payload.channel_ids:
-        if use_route_channel:
-            where_fragments.append(
-                f"""
-                EXISTS (
-                    SELECT 1
-                    FROM agent_customers ac
-                    WHERE ac.route_id = {route_col}
-                    AND ac.outlet_channel_id = ANY(:channel_ids)
-                )
-                """
-            )
-        else:
-            where_fragments.append(
-                f"{customer_alias}.outlet_channel_id = ANY(:channel_ids)"
-            )
+    if payload.item_category_ids:
+        where_fragments.append(f"i.category_id = ANY(:item_category_ids)")
+        params["item_category_ids"] = payload.item_category_ids
 
-        params["channel_ids"] = payload.channel_ids
-
+    if payload.item_ids:
+        where_fragments.append(f"{item_alias}.item_id = ANY(:item_ids)")
+        params["item_ids"] = payload.item_ids
 
     return where_fragments, params
 
@@ -95,8 +82,7 @@ def prepare_inventory_movement_context(payload:InventoryMovementRequest):
         route_col="uh.route_id",
         salesman_alias="su",
         route_alias="ru",
-        customer_alias=None,
-        use_route_channel=True,
+        item_alias= "ud",
         previous_day=True,
     )
 
@@ -106,8 +92,7 @@ def prepare_inventory_movement_context(payload:InventoryMovementRequest):
         route_col="lh.route_id",
         salesman_alias="sl",
         route_alias="rl",
-        customer_alias=None,
-        use_route_channel=True,
+        item_alias= "ld",
     )
 
     sales_where, sales_params = build_common_filters(
@@ -116,7 +101,7 @@ def prepare_inventory_movement_context(payload:InventoryMovementRequest):
         route_col="ih.route_id",
         salesman_alias="si",
         route_alias="ri",
-        customer_alias="aci",
+        item_alias= "id",
     )
 
     van_return_where, van_return_params = build_common_filters(
@@ -125,7 +110,7 @@ def prepare_inventory_movement_context(payload:InventoryMovementRequest):
         route_col="vrh.route_id",
         salesman_alias="svr",
         route_alias="rvr",
-        customer_alias="acvr",
+        item_alias= "vrd",
     )
 
     return_where, return_params = build_common_filters(
@@ -134,7 +119,7 @@ def prepare_inventory_movement_context(payload:InventoryMovementRequest):
         route_col="rh.route_id",
         salesman_alias="sr",
         route_alias="rr",
-        customer_alias="acr",
+        item_alias= "rd",
     )
 
     unload_where.extend(
