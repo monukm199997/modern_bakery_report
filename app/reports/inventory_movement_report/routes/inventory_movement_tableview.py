@@ -21,7 +21,34 @@ from app.reports.inventory_movement_report.utils.inventory_movement_sql_query im
     SALESMAN_CODE,
     SALESMAN_NAME,
     ITEM_NAME,
+    ITEM_CODE,
     ITEM_CATEGORY,
+    GROUP_UNLOAD,
+    GROUP_LOAD,
+    GROUP_SALES,
+    GROUP_VAN_RETURN,
+    GROUP_RETURN,
+    SALESMAN_SELECT,
+    FINAL_KEYS,
+    JOIN_CONDITION,
+    LOAD_JOIN_CONDITION,
+    SALES_JOIN_CONDITION,
+    VAN_RETURN_JOIN_CONDITION,
+    RETURN_JOIN_CONDITION,
+    _GROUP_UNLOAD,
+    _GROUP_LOAD,
+    _GROUP_SALES,
+    _GROUP_VAN_RETURN,
+    _GROUP_RETURN,
+    _SALESMAN_SELECT,
+    _FINAL_KEYS,
+    _JOIN_CONDITION,
+    _LOAD_JOIN_CONDITION,
+    _SALES_JOIN_CONDITION,
+    _VAN_RETURN_JOIN_CONDITION,
+    _RETURN_JOIN_CONDITION,
+
+
 )
 
 router = APIRouter(
@@ -30,6 +57,42 @@ router = APIRouter(
 
 
 def build_inventory_movement_query(ctx):
+    item_wise = ctx["item_wise"]
+    if item_wise:
+        group_unload = GROUP_UNLOAD
+        group_load = GROUP_LOAD
+        group_sales = GROUP_SALES
+        group_van_return = GROUP_VAN_RETURN
+        group_return = GROUP_RETURN
+        salesmen_select = SALESMAN_SELECT
+        final_keys = FINAL_KEYS
+        unload_join_condition = JOIN_CONDITION
+        load_join_condition = LOAD_JOIN_CONDITION
+        sales_join_condition = SALES_JOIN_CONDITION
+        van_return_join_condition = VAN_RETURN_JOIN_CONDITION
+        return_join_condition = RETURN_JOIN_CONDITION
+
+        item_select = f"""
+            {ITEM_CODE}
+            {ITEM_NAME}
+            {ITEM_CATEGORY}
+        """
+    else:
+        group_unload = _GROUP_UNLOAD
+        group_load = _GROUP_LOAD
+        group_sales = _GROUP_SALES
+        group_van_return = _GROUP_VAN_RETURN
+        group_return = _GROUP_RETURN
+        salesmen_select = _SALESMAN_SELECT
+        final_keys = _FINAL_KEYS
+        unload_join_condition = _JOIN_CONDITION
+        load_join_condition = _LOAD_JOIN_CONDITION
+        sales_join_condition = _SALES_JOIN_CONDITION
+        van_return_join_condition = _VAN_RETURN_JOIN_CONDITION
+        return_join_condition = _RETURN_JOIN_CONDITION
+
+        item_select = ""
+
 
     query = f"""
         WITH unload_data AS (
@@ -37,97 +100,92 @@ def build_inventory_movement_query(ctx):
                 uh.salesman_id,
                 su.osa_code AS salesman_code,
                 su.name AS salesman_name,
-                ud.item_id,
-                i.name AS item_name,
-                i.category_id AS category_id,
-                ic.category_name AS item_category,
+                {"ud.item_id," if item_wise else ""}
+                {"i.name AS item_name," if item_wise else ""}
+                {"i.code AS item_code," if item_wise else ""}   
+                {"i.category_id AS category_id," if item_wise else ""}
+                {"ic.category_name AS item_category," if item_wise else ""}
+
                 {ctx['unload_quantity']} AS open_stock
             FROM {UNLOAD_DATA_JOIN}
             WHERE {ctx['unload_where']}
-            GROUP BY uh.salesman_id, su.osa_code, su.name, ud.item_id, i.name, i.category_id, ic.category_name
+            GROUP BY {group_unload}
         ),
         load_data AS (
             SELECT
                 lh.salesman_id,
                 sl.osa_code AS salesman_code,
                 sl.name AS salesman_name,
-                ld.item_id,
-                i.name AS item_name,
-                i.category_id AS category_id,
-                ic.category_name AS item_category,
+                {"ld.item_id," if item_wise else ""}
+                {"i.name AS item_name," if item_wise else ""}
+                {"i.code AS item_code," if item_wise else ""}
+                {"i.category_id AS category_id," if item_wise else ""}
+                {"ic.category_name AS item_category," if item_wise else ""}
                 {ctx['load_quantity']} AS load_qty
             FROM {LOAD_DATA_JOIN}
             WHERE {ctx['load_where']}
-            GROUP BY lh.salesman_id, sl.osa_code, sl.name, ld.item_id, i.name, i.category_id, ic.category_name
+            GROUP BY {group_load}
         ),
         sales_data AS (
             SELECT
                 ih.salesman_id,
                 si.osa_code AS salesman_code,
                 si.name AS salesman_name,
-                id.item_id,
-                i.name AS item_name,
-                i.category_id AS category_id,
-                ic.category_name AS item_category,
+                {"id.item_id," if item_wise else ""}
+                {"i.name AS item_name," if item_wise else ""}
+                {"i.code AS item_code," if item_wise else ""}
+                {"i.category_id AS category_id," if item_wise else ""}
+                {"ic.category_name AS item_category," if item_wise else ""}
                 {ctx['sales_quantity']} AS sold_qty
             FROM {SALES_DATA_JOIN}
             WHERE {ctx['sales_where']}
-            GROUP BY ih.salesman_id, si.osa_code, si.name, id.item_id, i.name, i.category_id, ic.category_name
+            GROUP BY {group_sales}
         ),
         van_return_data AS (
             SELECT
                 vrh.salesman_id,
                 svr.osa_code AS salesman_code,
                 svr.name AS salesman_name,
-                vrd.item_id,
-                i.name AS item_name,
-                i.category_id AS category_id,
-                ic.category_name AS item_category,
+                {"vrd.item_id," if item_wise else ""}
+                {"i.name AS item_name," if item_wise else ""}
+                {"i.code AS item_code," if item_wise else ""}
+                {"i.category_id AS category_id," if item_wise else ""}
+                {"ic.category_name AS item_category," if item_wise else ""}
                 {ctx['van_return_quantity']} AS van_return_qty
             FROM {VAN_RETURN_DATA_JOIN}
             WHERE {ctx['van_return_where']}
-            GROUP BY vrh.salesman_id, svr.osa_code, svr.name, vrd.item_id, i.name, i.category_id, ic.category_name
+            GROUP BY {group_van_return}
         ),
         return_data AS (
             SELECT
                 rh.salesman_id,
                 sr.osa_code AS salesman_code,
                 sr.name AS salesman_name,
-                rd.item_id,
-                i.name AS item_name,
-                i.category_id AS category_id,
-                ic.category_name AS item_category,
+                {"rd.item_id," if item_wise else ""}
+                {"i.name AS item_name," if item_wise else ""}
+                {"i.code AS item_code," if item_wise else ""}
+                {"i.category_id AS category_id," if item_wise else ""}
+                {"ic.category_name AS item_category," if item_wise else ""}
                 {ctx['return_quantity']} AS return_qty
             FROM {RETURN_DATA_JOIN}
             WHERE {ctx['return_where']}
-            GROUP BY rh.salesman_id, sr.osa_code, sr.name, rd.item_id, i.name, i.category_id, ic.category_name
+            GROUP BY {group_return}
         ),
         salesmen AS (
-            SELECT salesman_id, item_id, category_id FROM unload_data
-            UNION
-            SELECT salesman_id, item_id, category_id FROM load_data
-            UNION
-            SELECT salesman_id, item_id, category_id FROM sales_data
-            UNION
-            SELECT salesman_id, item_id, category_id FROM van_return_data
-            UNION
-            SELECT salesman_id, item_id, category_id FROM return_data            
+            {salesmen_select}
         )
         SELECT
-            s.salesman_id,
-            s.item_id,
-            s.category_id,
+             {final_keys}
             {SALESMAN_CODE}
             {SALESMAN_NAME}
-            {ITEM_NAME}
-            {ITEM_CATEGORY}
+            {item_select}
             {FINAL_SELECT}
         FROM salesmen s
-        LEFT JOIN unload_data u ON u.salesman_id = s.salesman_id AND u.item_id = s.item_id AND u.category_id = s.category_id
-        LEFT JOIN load_data l ON l.salesman_id = s.salesman_id AND l.item_id = s.item_id AND l.category_id = s.category_id
-        LEFT JOIN sales_data sd ON sd.salesman_id = s.salesman_id AND sd.item_id = s.item_id AND sd.category_id = s.category_id
-        LEFT JOIN van_return_data vr ON vr.salesman_id = s.salesman_id AND vr.item_id = s.item_id AND vr.category_id = s.category_id
-        LEFT JOIN return_data r ON r.salesman_id = s.salesman_id AND r.item_id = s.item_id AND r.category_id = s.category_id
+        LEFT JOIN unload_data u ON {unload_join_condition}
+        LEFT JOIN load_data l ON {load_join_condition}
+        LEFT JOIN sales_data sd ON {sales_join_condition}
+        LEFT JOIN van_return_data vr ON {van_return_join_condition}
+        LEFT JOIN return_data r ON {return_join_condition}
     """
     return query
 

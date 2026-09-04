@@ -70,6 +70,10 @@ def get_van_return_quantity():
 
 def prepare_inventory_movement_context(payload:InventoryMovementRequest):
 
+    item_wise = bool(
+        payload.item_category_ids or payload.item_ids
+    )
+
     unload_quantity = get_unload_quantity()
     load_quantity = get_load_quantity()
     sales_quantity = get_sales_quantity()
@@ -174,6 +178,7 @@ def prepare_inventory_movement_context(payload:InventoryMovementRequest):
         "sales_quantity": sales_quantity,
         "return_quantity": return_quantity,
         "van_return_quantity": van_return_quantity,
+        "item_wise": item_wise,
         "params": params,
     }
 

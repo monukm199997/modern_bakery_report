@@ -128,6 +128,15 @@ SALESMAN_NAME ="""
     ) AS salesman_name,
 """
 
+ITEM_CODE =""" 
+        COALESCE(
+            u.item_code,
+            l.item_code,
+            sd.item_code,
+            vr.item_code,
+            r.item_code
+        ) AS item_code,
+    """
 ITEM_NAME =""" 
         COALESCE(
             u.item_name,
@@ -156,4 +165,159 @@ FINAL_SELECT = f"""
         COALESCE(vr.van_return_qty, 0) AS van_return_qty,
         {CLOSE_STOCK} AS close_stock
             
+    """
+
+
+GROUP_UNLOAD = """
+        uh.salesman_id,
+        su.osa_code,
+        su.name,
+        ud.item_id,
+        i.name,
+        i.code,
+        i.category_id,
+        ic.category_name
+    """
+
+GROUP_LOAD = """
+        lh.salesman_id,
+        sl.osa_code,
+        sl.name,
+        ld.item_id,
+        i.name,
+        i.code,
+        i.category_id,
+        ic.category_name
+    """
+GROUP_SALES = """
+        ih.salesman_id,
+        si.osa_code,
+        si.name,
+        id.item_id,
+        i.name,
+        i.code,
+        i.category_id,
+        ic.category_name
+    """
+GROUP_VAN_RETURN ="""
+        vrh.salesman_id,
+        svr.osa_code,
+        svr.name,
+        vrd.item_id,
+        i.name,
+        i.code,
+        i.category_id,
+        ic.category_name
+    """
+GROUP_RETURN = """
+        rh.salesman_id,
+        sr.osa_code,
+        sr.name,
+        rd.item_id,
+        i.name,
+        i.code,
+        i.category_id,
+        ic.category_name
+    """
+
+SALESMAN_SELECT = """
+        SELECT salesman_id, item_id, category_id FROM unload_data
+        UNION
+        SELECT salesman_id, item_id, category_id FROM load_data
+        UNION
+        SELECT salesman_id, item_id, category_id FROM sales_data
+        UNION
+        SELECT salesman_id, item_id, category_id FROM van_return_data
+        UNION
+        SELECT salesman_id, item_id, category_id FROM return_data
+    """
+
+FINAL_KEYS = """
+        s.salesman_id,
+        s.item_id,
+        s.category_id,
+    """
+JOIN_CONDITION =  """
+        u.salesman_id = s.salesman_id
+        AND u.item_id = s.item_id
+        AND u.category_id = s.category_id
+    """
+LOAD_JOIN_CONDITION = """
+        l.salesman_id = s.salesman_id
+        AND l.item_id = s.item_id
+        AND l.category_id = s.category_id
+    """
+SALES_JOIN_CONDITION = """
+        sd.salesman_id = s.salesman_id
+        AND sd.item_id = s.item_id
+        AND sd.category_id = s.category_id
+    """
+VAN_RETURN_JOIN_CONDITION = """
+        vr.salesman_id = s.salesman_id
+        AND vr.item_id = s.item_id
+        AND vr.category_id = s.category_id
+    """
+RETURN_JOIN_CONDITION = """
+        r.salesman_id = s.salesman_id
+        AND r.item_id = s.item_id
+        AND r.category_id = s.category_id
+    """
+
+_GROUP_UNLOAD =  """
+            uh.salesman_id,
+            su.osa_code,
+            su.name
+        """
+
+_GROUP_LOAD = """
+        lh.salesman_id,
+        sl.osa_code,
+        sl.name
+    """
+_GROUP_SALES = """
+        ih.salesman_id,
+        si.osa_code,
+        si.name
+    """
+_GROUP_VAN_RETURN =  """
+        vrh.salesman_id,
+        svr.osa_code,
+        svr.name
+    """
+_GROUP_RETURN =  """
+        rh.salesman_id,
+        sr.osa_code,
+        sr.name
+    """
+_SALESMAN_SELECT = """
+        SELECT salesman_id FROM unload_data
+        UNION
+        SELECT salesman_id FROM load_data
+        UNION
+        SELECT salesman_id FROM sales_data
+        UNION
+        SELECT salesman_id FROM van_return_data
+        UNION
+        SELECT salesman_id FROM return_data
+    """
+_FINAL_KEYS = """
+        s.salesman_id,
+    """
+_JOIN_CONDITION = """
+        u.salesman_id = s.salesman_id
+    """
+_LOAD_JOIN_CONDITION = """
+        l.salesman_id = s.salesman_id
+    """
+
+_SALES_JOIN_CONDITION = """
+        sd.salesman_id = s.salesman_id
+    """
+
+_VAN_RETURN_JOIN_CONDITION = """
+        vr.salesman_id = s.salesman_id
+    """
+
+_RETURN_JOIN_CONDITION = """
+        r.salesman_id = s.salesman_id
     """
